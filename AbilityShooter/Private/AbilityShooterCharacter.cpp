@@ -1,5 +1,3 @@
-// Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
-
 #include "AbilityShooter.h"
 #include "AbilityShooterCharacter.h"
 
@@ -65,6 +63,20 @@ void AAbilityShooterCharacter::SetupPlayerInputComponent(class UInputComponent* 
 	// handle touch devices
 	InputComponent->BindTouch(IE_Pressed, this, &AAbilityShooterCharacter::TouchStarted);
 	InputComponent->BindTouch(IE_Released, this, &AAbilityShooterCharacter::TouchStopped);
+
+	//current Equipment (weapon or Active Outfit Ability) interaction
+	InputComponent->BindAction("Primary", IE_Pressed, this, &AAbilityShooterCharacter::PrimaryUseStart);
+	InputComponent->BindAction("Primary", IE_Released, this, &AAbilityShooterCharacter::PrimaryUseStop);
+	InputComponent->BindAction("Alternate", IE_Pressed, this, &AAbilityShooterCharacter::AlternateUseStart);
+	InputComponent->BindAction("Alternate", IE_Released, this, &AAbilityShooterCharacter::AlternateUseStop);
+
+	//ability interaction
+	InputComponent->BindAction("Ability1", IE_Pressed, this, &AAbilityShooterCharacter::UseAbilityStart<0>);
+	InputComponent->BindAction("Ability1", IE_Released, this, &AAbilityShooterCharacter::UseAbilityStop<0>);
+	InputComponent->BindAction("Ability2", IE_Pressed, this, &AAbilityShooterCharacter::UseAbilityStart<1>);
+	InputComponent->BindAction("Ability2", IE_Released, this, &AAbilityShooterCharacter::UseAbilityStop<1>);
+	InputComponent->BindAction("Ultimate", IE_Pressed, this, &AAbilityShooterCharacter::UseAbilityStart<2>);
+	InputComponent->BindAction("Ultimate", IE_Released, this, &AAbilityShooterCharacter::UseAbilityStop<2>);
 }
 
 
@@ -83,6 +95,30 @@ void AAbilityShooterCharacter::TouchStopped(ETouchIndex::Type FingerIndex, FVect
 	{
 		StopJumping();
 	}
+}
+
+void AAbilityShooterCharacter::PrimaryUseStart()
+{
+}
+
+void AAbilityShooterCharacter::PrimaryUseStop()
+{
+}
+
+void AAbilityShooterCharacter::AlternateUseStart()
+{
+}
+
+void AAbilityShooterCharacter::AlternateUseStop()
+{
+}
+
+void AAbilityShooterCharacter::OnStartAbility(int32 abilityIndex)
+{
+}
+
+void AAbilityShooterCharacter::OnStopAbility(int32 abilityIndex)
+{
 }
 
 void AAbilityShooterCharacter::TurnAtRate(float Rate)

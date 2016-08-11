@@ -1,4 +1,3 @@
-// Copyright 1998-2016 Epic Games, Inc. All Rights Reserved.
 #pragma once
 #include "GameFramework/Character.h"
 #include "AbilityShooterCharacter.generated.h"
@@ -51,6 +50,38 @@ protected:
 
 	/** Handler for when a touch input stops. */
 	void TouchStopped(ETouchIndex::Type FingerIndex, FVector Location);
+
+	/** handler for primary equipment use starting*/
+	void PrimaryUseStart();
+
+	/** handler for primary equipment use stopping */
+	void PrimaryUseStop();
+
+	/** handler for alternate equipment use starting */
+	void AlternateUseStart();
+
+	/** handler for alternate equipment use stopping */
+	void AlternateUseStop();
+
+	/** template version for simple input */
+	template<int Index>
+	void UseAbilityStart()
+	{
+		OnStartAbility(Index);
+	}
+
+	/** template version for simple input finished */
+	template<int Index>
+	void UseAbilityStop()
+	{
+		OnStopAbility(Index);
+	}
+
+	/** handler for starting abilities */
+	void OnStartAbility(int32 abilityIndex);
+
+	/** handler for stopping abilities */
+	void OnStopAbility(int32 abilityIndex);
 
 protected:
 	// APawn interface

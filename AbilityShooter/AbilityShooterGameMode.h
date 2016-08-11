@@ -10,6 +10,9 @@ class AAbilityShooterGameMode : public AGameMode
 
 public:
 	AAbilityShooterGameMode();
+
+	/* called whenever a Shooter is killed in game */
+	void ShooterKilled(AController* Killer, AController* KilledPlayer, APawn* KilledPawn, const UDamageType* DamageType);
 };
 
 

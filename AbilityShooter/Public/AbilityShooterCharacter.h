@@ -1,5 +1,6 @@
 #pragma once
 #include "GameFramework/Character.h"
+#include "AbilityShooterTypes.h"
 #include "AbilityShooterCharacter.generated.h"
 
 UCLASS(config=Game)
@@ -26,6 +27,13 @@ public:
 	float BaseLookUpRate;
 
 protected:
+
+	/** Replicate where this pawn was last hit and damaged */
+	UPROPERTY(Transient, ReplicatedUsing = OnRep_LastTakeHitInfo)
+	struct FTakeHitInfo LastTakeHitInfo;
+
+	/** Time at which point the last take hit info for the actor times out and won't be replicated; Used to stop join-in-progress effects all over the screen */
+	float LastTakeHitTimeTimeout;
 
 	/** Called for forwards/backward input */
 	void MoveForward(float Value);
@@ -83,15 +91,58 @@ protected:
 	/** handler for stopping abilities */
 	void OnStopAbility(int32 abilityIndex);
 
-protected:
 	// APawn interface
 	virtual void SetupPlayerInputComponent(class UInputComponent* InputComponent) override;
 	// End of APawn interface
 
+	/** sets up the replication for taking a hit */
+	void ReplicateHit(float Damage, struct FDamageEvent const& DamageEvent, class APawn* InstigatingPawn, class AActor* DamageCauser, bool bKilled);
+
+	/** play effects on hit */
+	virtual void PlayHit(float DamageTaken, struct FDamageEvent const& DamageEvent, class APawn* PawnInstigator, class AActor* DamageCauser);
+
+	/** notification when killed, for both the server and client. */
+	virtual void OnDeath(float KillingDamage, struct FDamageEvent const& DamageEvent, class APawn* InstigatingPawn, class AActor* DamageCauser);
+
+	/** switch to ragdoll */
+	void SetRagdollPhysics();
+
+	/** play hit or death on client */
+	UFUNCTION()
+	void OnRep_LastTakeHitInfo();
+
+	/** Called on the actor right before replication occurs */
+	virtual void PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker) override;
+
 public:
+
+	// Current health of the Shooter
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = Health)
+	float health;
+
+	/** Identifies if the Shooter is in its dying state */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Health)
+	uint32 bIsDying : 1;
+
 	/** Returns CameraBoom subobject **/
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	/** Returns FollowCamera subobject **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+
+	/* override take damage function to allow for damage to drain HP and be modified */
+	virtual float TakeDamage(float Damage, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
+
+	/** Returns True if the Shooter can die in the current state */
+	virtual bool CanDie() const;
+
+	/**
+	* Kills Shooter.  Server only.
+	* @param KillingDamage - Damage amount of the killing blow
+	* @param DamageEvent - Damage event of the killing blow
+	* @param Killer - Who killed this Shooter
+	* @param DamageCauser - the Actor that directly caused the damage (i.e. the Projectile that exploded, the Weapon that fired, etc)
+	* @returns true if allowed
+	*/
+	virtual bool Die(float KillingDamage, struct FDamageEvent const& DamageEvent, class AController* Killer, class AActor* DamageCauser);
 };
 

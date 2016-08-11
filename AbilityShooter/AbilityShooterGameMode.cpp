@@ -13,3 +13,8 @@ AAbilityShooterGameMode::AAbilityShooterGameMode()
 		DefaultPawnClass = PlayerPawnBPClass.Class;
 	}
 }
+
+void AAbilityShooterGameMode::ShooterKilled(AController* Killer, AController* KilledPlayer, APawn* KilledPawn, const UDamageType* DamageType)
+{
+	//@TODO: notify player states about Shooter deaths
+}

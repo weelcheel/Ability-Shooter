@@ -1,5 +1,7 @@
 #include "AbilityShooter.h"
 #include "AbilityShooterCharacter.h"
+#include "AbilityShooterGameMode.h"
+#include "UnrealNetwork.h"
 
 //////////////////////////////////////////////////////////////////////////
 // AAbilityShooterCharacter
@@ -37,6 +39,8 @@ AAbilityShooterCharacter::AAbilityShooterCharacter()
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named MyCharacter (to avoid direct content references in C++)
+	
+	health = 100.f;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -79,6 +83,246 @@ void AAbilityShooterCharacter::SetupPlayerInputComponent(class UInputComponent* 
 	InputComponent->BindAction("Ultimate", IE_Released, this, &AAbilityShooterCharacter::UseAbilityStop<2>);
 }
 
+void AAbilityShooterCharacter::ReplicateHit(float Damage, struct FDamageEvent const& DamageEvent, class APawn* PawnInstigator, class AActor* DamageCauser, bool bKilled)
+{
+	const float TimeoutTime = GetWorld()->GetTimeSeconds() + 0.5f;
+
+	FDamageEvent const& LastDamageEvent = LastTakeHitInfo.GetDamageEvent();
+	if ((PawnInstigator == LastTakeHitInfo.PawnInstigator.Get()) && (LastDamageEvent.DamageTypeClass == LastTakeHitInfo.DamageTypeClass) && (LastTakeHitTimeTimeout == TimeoutTime))
+	{
+		// same frame damage
+		if (bKilled && LastTakeHitInfo.bKilled)
+		{
+			// Redundant death take hit, just ignore it
+			return;
+		}
+
+		// otherwise, accumulate damage done this frame
+		Damage += LastTakeHitInfo.ActualDamage;
+	}
+
+	LastTakeHitInfo.ActualDamage = Damage;
+	LastTakeHitInfo.PawnInstigator = Cast<AAbilityShooterCharacter>(PawnInstigator);
+	LastTakeHitInfo.DamageCauser = DamageCauser;
+	LastTakeHitInfo.SetDamageEvent(DamageEvent);
+	LastTakeHitInfo.bKilled = bKilled;
+	LastTakeHitInfo.EnsureReplication();
+
+	LastTakeHitTimeTimeout = TimeoutTime;
+}
+
+void AAbilityShooterCharacter::PlayHit(float DamageTaken, struct FDamageEvent const& DamageEvent, class APawn* PawnInstigator, class AActor* DamageCauser)
+{
+	if (Role == ROLE_Authority)
+	{
+		ReplicateHit(DamageTaken, DamageEvent, PawnInstigator, DamageCauser, false);
+
+		// play the force feedback effect on the client player controller
+		APlayerController* PC = Cast<APlayerController>(Controller);
+		if (PC && DamageEvent.DamageTypeClass)
+		{
+			/*UShooterDamageType *DamageType = Cast<UShooterDamageType>(DamageEvent.DamageTypeClass->GetDefaultObject());
+			if (DamageType && DamageType->HitForceFeedback)
+			{
+				PC->ClientPlayForceFeedback(DamageType->HitForceFeedback, false, "Damage");
+			}*/
+		}
+	}
+
+	if (DamageTaken > 0.f)
+		ApplyDamageMomentum(DamageTaken, DamageEvent, PawnInstigator, DamageCauser);
+
+	/*AShooterPlayerController* MyPC = Cast<AShooterPlayerController>(Controller);
+	AShooterHUD* MyHUD = MyPC ? Cast<AShooterHUD>(MyPC->GetHUD()) : NULL;
+	if (MyHUD)
+	{
+		MyHUD->NotifyWeaponHit(DamageTaken, DamageEvent, PawnInstigator);
+	}
+
+	if (PawnInstigator && PawnInstigator != this && PawnInstigator->IsLocallyControlled())
+	{
+		AShooterPlayerController* InstigatorPC = Cast<AShooterPlayerController>(PawnInstigator->Controller);
+		AShooterHUD* InstigatorHUD = InstigatorPC ? Cast<AShooterHUD>(InstigatorPC->GetHUD()) : NULL;
+		if (InstigatorHUD)
+		{
+			InstigatorHUD->NotifyEnemyHit();
+		}
+	}*/
+}
+
+void AAbilityShooterCharacter::OnRep_LastTakeHitInfo()
+{
+	if (LastTakeHitInfo.bKilled)
+		OnDeath(LastTakeHitInfo.ActualDamage, LastTakeHitInfo.GetDamageEvent(), LastTakeHitInfo.PawnInstigator.Get(), LastTakeHitInfo.DamageCauser.Get());
+	else
+		PlayHit(LastTakeHitInfo.ActualDamage, LastTakeHitInfo.GetDamageEvent(), LastTakeHitInfo.PawnInstigator.Get(), LastTakeHitInfo.DamageCauser.Get());
+}
+
+float AAbilityShooterCharacter::TakeDamage(float Damage, FDamageEvent const & DamageEvent, AController * EventInstigator, AActor * DamageCauser)
+{
+	//@TODO: check for invulnerability
+
+	//don't damage already dead characters
+	if (health <= 0.f)
+		return 0.0f;
+
+	//@TODO: let the gametype modify the damage
+	//@TODO: let the stats then modify the damage
+
+	//call the super version for blueprint hooks
+	const float actualDamage = Super::TakeDamage(Damage, DamageEvent, EventInstigator, DamageCauser);
+	if (actualDamage > 0.f)
+	{
+		health -= actualDamage;
+		if (health <= 0.f)
+			Die(actualDamage, DamageEvent, EventInstigator, DamageCauser);
+		else
+			PlayHit(actualDamage, DamageEvent, IsValid(EventInstigator) ? EventInstigator->GetPawn() : nullptr, DamageCauser);
+
+		MakeNoise(1.0f, EventInstigator ? EventInstigator->GetPawn() : this);
+	}
+
+	return actualDamage;
+}
+
+bool AAbilityShooterCharacter::CanDie() const
+{
+	if (bIsDying || IsPendingKill() || Role != ROLE_Authority || !IsValid(GetWorld()->GetAuthGameMode()) || GetWorld()->GetAuthGameMode()->GetMatchState() == MatchState::LeavingMap)
+		return false;
+
+	return true;
+}
+
+bool AAbilityShooterCharacter::Die(float KillingDamage, struct FDamageEvent const& DamageEvent, class AController* Killer, class AActor* DamageCauser)
+{
+	if (!CanDie())
+		return false;
+
+	health = FMath::Min(0.0f, health);
+
+	// if this is an environmental death then refer to the previous killer so that they receive credit (knocked into lava pits, etc)
+	UDamageType const* const DamageType = DamageEvent.DamageTypeClass ? DamageEvent.DamageTypeClass->GetDefaultObject<UDamageType>() : GetDefault<UDamageType>();
+	Killer = GetDamageInstigator(Killer, *DamageType);
+
+	AController* const KilledPlayer = (IsValid(GetController())) ? GetController() : Cast<AController>(GetOwner());
+	GetWorld()->GetAuthGameMode<AAbilityShooterGameMode>()->ShooterKilled(Killer, KilledPlayer, this, DamageType);
+
+	NetUpdateFrequency = GetDefault<AAbilityShooterCharacter>()->NetUpdateFrequency;
+	GetCharacterMovement()->ForceReplicationUpdate();
+
+	OnDeath(KillingDamage, DamageEvent, IsValid(Killer) ? Killer->GetPawn() : nullptr, DamageCauser);
+	return true;
+}
+
+void AAbilityShooterCharacter::OnDeath(float KillingDamage, FDamageEvent const & DamageEvent, APawn * PawnInstigator, AActor * DamageCauser)
+{
+	if (bIsDying)
+		return;
+
+	bReplicateMovement = false;
+	bTearOff = true;
+	bIsDying = true;
+
+	if (Role == ROLE_Authority)
+	{
+		ReplicateHit(KillingDamage, DamageEvent, PawnInstigator, DamageCauser, true);
+
+		// play the force feedback effect on the client player controller
+		APlayerController* PC = Cast<APlayerController>(Controller);
+		if (PC && DamageEvent.DamageTypeClass)
+		{
+			/*UShooterDamageType *DamageType = Cast<UShooterDamageType>(DamageEvent.DamageTypeClass->GetDefaultObject());
+			if (DamageType && DamageType->KilledForceFeedback)
+			{
+				PC->ClientPlayForceFeedback(DamageType->KilledForceFeedback, false, "Damage");
+			}*/
+		}
+	}
+
+	// cannot use IsLocallyControlled here, because even local client's controller may be NULL here
+	//if (GetNetMode() != NM_DedicatedServer && DeathSound && Mesh1P && Mesh1P->IsVisible())
+		//UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation());
+
+	// remove all weapons
+	//DestroyInventory();
+
+	DetachFromControllerPendingDestroy();
+	//StopAllAnimMontages();
+
+	/*if (LowHealthWarningPlayer && LowHealthWarningPlayer->IsPlaying())
+	{
+		LowHealthWarningPlayer->Stop();
+	}
+
+	if (RunLoopAC)
+	{
+		RunLoopAC->Stop();
+	}*/
+
+
+
+	if (GetMesh())
+	{
+		static FName CollisionProfileName(TEXT("Ragdoll"));
+		GetMesh()->SetCollisionProfileName(CollisionProfileName);
+	}
+	SetActorEnableCollision(true);
+
+	// Death anim
+	/*float DeathAnimDuration = PlayAnimMontage(DeathAnim);
+
+	// Ragdoll
+	if (DeathAnimDuration > 0.f)
+	{
+		// Use a local timer handle as we don't need to store it for later but we don't need to look for something to clear
+		FTimerHandle TimerHandle;
+		GetWorldTimerManager().SetTimer(TimerHandle, this, &AShooterCharacter::SetRagdollPhysics, FMath::Min(0.1f, DeathAnimDuration), false);
+	}
+	else
+	{
+		SetRagdollPhysics();
+	}*/
+
+	SetRagdollPhysics();
+
+	// disable collisions on capsule
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GetCapsuleComponent()->SetCollisionResponseToAllChannels(ECR_Ignore);
+}
+
+void AAbilityShooterCharacter::SetRagdollPhysics()
+{
+	bool bInRagdoll = false;
+
+	if (IsPendingKill())
+		bInRagdoll = false;
+	else if (!GetMesh() || !GetMesh()->GetPhysicsAsset())
+		bInRagdoll = false;
+	else
+	{
+		// initialize physics/etc
+		GetMesh()->SetAllBodiesSimulatePhysics(true);
+		GetMesh()->SetSimulatePhysics(true);
+		GetMesh()->WakeAllRigidBodies();
+		GetMesh()->bBlendPhysics = true;
+
+		bInRagdoll = true;
+	}
+
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();
+	GetCharacterMovement()->SetComponentTickEnabled(false);
+
+	if (!bInRagdoll)
+	{
+		// hide and set short lifespan
+		TurnOff();
+		SetActorHiddenInGame(true);
+		SetLifeSpan(1.0f);
+	}
+	else
+		SetLifeSpan(10.0f);
+}
 
 void AAbilityShooterCharacter::TouchStarted(ETouchIndex::Type FingerIndex, FVector Location)
 {
@@ -128,10 +372,13 @@ void AAbilityShooterCharacter::TurnAtRate(float Rate)
 
 	if (GetVelocity().SizeSquared() <= 0.f)
 	{
-		FRotator newRot = Controller->GetControlRotation();
-		newRot.Pitch = GetActorRotation().Pitch;
+		// find out which way is forward
+		const FRotator Rotation = Controller->GetControlRotation();
+		const FRotator YawRotation(0, Rotation.Yaw, 0);
 
-		SetActorRotation(newRot);
+		// get forward vector
+		const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+		AddMovementInput(Direction, 0.01f);
 	}
 }
 
@@ -142,10 +389,13 @@ void AAbilityShooterCharacter::LookUpAtRate(float Rate)
 
 	if (GetVelocity().SizeSquared() <= 0.f)
 	{
-		FRotator newRot = Controller->GetControlRotation();
-		newRot.Pitch = GetActorRotation().Pitch;
+		// find out which way is forward
+		const FRotator Rotation = Controller->GetControlRotation();
+		const FRotator YawRotation(0, Rotation.Yaw, 0);
 
-		SetActorRotation(newRot);
+		// get forward vector
+		const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+		AddMovementInput(Direction, 0.01f);
 	}
 }
 
@@ -176,4 +426,33 @@ void AAbilityShooterCharacter::MoveRight(float Value)
 		// add movement in that direction
 		AddMovementInput(Direction, Value);
 	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Replication
+
+void AAbilityShooterCharacter::PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker)
+{
+	Super::PreReplication(ChangedPropertyTracker);
+
+	// Only replicate this property for a short duration after it changes so join in progress players don't get spammed with fx when joining late
+	DOREPLIFETIME_ACTIVE_OVERRIDE(AAbilityShooterCharacter, LastTakeHitInfo, GetWorld() && GetWorld()->GetTimeSeconds() < LastTakeHitTimeTimeout);
+}
+
+void AAbilityShooterCharacter::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	// only to local owner: weapon change requests are locally instigated, other clients don't need it
+	//DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, Inventory, COND_OwnerOnly);
+
+	// everyone except local owner: flag change is locally instigated
+	//DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, bIsTargeting, COND_SkipOwner);
+	//DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, bWantsToRun, COND_SkipOwner);
+
+	DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, LastTakeHitInfo, COND_Custom);
+
+	// everyone
+	//DOREPLIFETIME(AAbilityShooterCharacter, CurrentWeapon);
+	DOREPLIFETIME(AAbilityShooterCharacter, health);
 }

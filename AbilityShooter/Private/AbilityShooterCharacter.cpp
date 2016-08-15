@@ -1,6 +1,7 @@
 #include "AbilityShooter.h"
 #include "AbilityShooterCharacter.h"
 #include "AbilityShooterGameMode.h"
+#include "EquipmentItem.h"
 #include "UnrealNetwork.h"
 
 //////////////////////////////////////////////////////////////////////////
@@ -10,6 +11,16 @@ AAbilityShooterCharacter::AAbilityShooterCharacter()
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
+
+	GetMesh()->SetCollisionObjectType(ECC_Pawn);
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	GetMesh()->SetCollisionResponseToChannel(COLLISION_WEAPON, ECR_Block);
+	GetMesh()->SetCollisionResponseToChannel(COLLISION_PROJECTILE, ECR_Block);
+	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(COLLISION_PROJECTILE, ECR_Block);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(COLLISION_WEAPON, ECR_Ignore);
 
 	// set our turn rates for input
 	BaseTurnRate = 45.f;
@@ -41,6 +52,154 @@ AAbilityShooterCharacter::AAbilityShooterCharacter()
 	// are set in the derived blueprint asset named MyCharacter (to avoid direct content references in C++)
 	
 	health = 100.f;
+}
+
+void AAbilityShooterCharacter::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	if (Role == ROLE_Authority)
+	{
+		health = GetMaxHealth();
+		SpawnDefaultInventory();
+	}
+
+	//@TODO: setup team color material IDs
+
+	//play respawn effects
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		if (IsValid(respawnFX))
+			UGameplayStatics::SpawnEmitterAtLocation(this, respawnFX, GetActorLocation(), GetActorRotation());
+		if (IsValid(respawnSound))
+			UGameplayStatics::PlaySoundAtLocation(this, respawnSound, GetActorLocation());
+	}
+}
+
+void AAbilityShooterCharacter::Destroyed()
+{
+	Super::Destroyed();
+
+	DestroyInventory();
+}
+
+void AAbilityShooterCharacter::PawnClientRestart()
+{
+	Super::PawnClientRestart();
+
+	//reattach equipment if needed
+	SetCurrentEquipment(currentEquipment);
+
+	//@TODO: set mesh team color material instance
+}
+
+void AAbilityShooterCharacter::PossessedBy(class AController* C)
+{
+	Super::PossessedBy(C);
+
+	//@TODO: set team color now that we have a player state on the server
+}
+
+void AAbilityShooterCharacter::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+
+	//@TODO: set team color now that we have a player state on the client
+}
+
+FRotator AAbilityShooterCharacter::GetAimOffsets() const
+{
+	const FVector aimDirWorld = GetBaseAimRotation().Vector();
+	const FVector aimDirLocal = ActorToWorld().InverseTransformVectorNoScale(aimDirWorld);
+	const FRotator aimRotLocal = aimDirLocal.Rotation();
+
+	return aimRotLocal;
+}
+
+void AAbilityShooterCharacter::SpawnDefaultInventory()
+{
+	if (Role < ROLE_Authority)
+		return;
+
+	for (TSubclassOf<AEquipmentItem> equipClass : defaultEquipmentList)
+	{
+		if (equipClass)
+		{
+			FActorSpawnParameters spawnInfo;
+			spawnInfo.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			AEquipmentItem* newItem = GetWorld()->SpawnActor<AEquipmentItem>(equipClass, spawnInfo);
+			AddEquipment(newItem);
+		}
+	}
+
+	if (equipmentInventory.Num() > 0)
+		EquipEquipment(equipmentInventory[0]);
+}
+
+void AAbilityShooterCharacter::DestroyInventory()
+{
+	if (Role < ROLE_Authority)
+		return;
+
+	for (int32 i = 0; i < equipmentInventory.Num(); i++)
+	{
+		AEquipmentItem* item = equipmentInventory[i];
+		if (IsValid(item))
+		{
+			RemoveEquipment(item);
+			item->Destroy();
+		}
+	}
+}
+
+void AAbilityShooterCharacter::AddEquipment(AEquipmentItem* item)
+{
+	if (IsValid(item) && Role == ROLE_Authority)
+	{
+		item->OnEnterInventory(this);
+		equipmentInventory.AddUnique(item);
+	}
+}
+
+void AAbilityShooterCharacter::RemoveEquipment(AEquipmentItem* item)
+{
+	if (IsValid(item) && Role == ROLE_Authority)
+	{
+		item->OnLeaveInventory();
+		equipmentInventory.RemoveSingle(item);
+	}
+}
+
+AEquipmentItem* AAbilityShooterCharacter::FindEquipment(TSubclassOf<AEquipmentItem> equipmentClass)
+{
+	for (AEquipmentItem* item : equipmentInventory)
+	{
+		if (IsValid(item) && item->IsA(equipmentClass))
+			return item;
+	}
+
+	return nullptr;
+}
+
+void AAbilityShooterCharacter::EquipEquipment(AEquipmentItem* item)
+{
+	if (IsValid(item))
+	{
+		if (Role == ROLE_Authority)
+			SetCurrentEquipment(item);
+		else
+			ServerEquipEquipment(item);
+	}
+}
+
+bool AAbilityShooterCharacter::ServerEquipEquipment_Validate(AEquipmentItem* newEquipment)
+{
+	return true;
+}
+
+void AAbilityShooterCharacter::ServerEquipEquipment_Implementation(AEquipmentItem* newEquipment)
+{
+	EquipEquipment(newEquipment);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -428,6 +587,63 @@ void AAbilityShooterCharacter::MoveRight(float Value)
 	}
 }
 
+FName AAbilityShooterCharacter::GetEquipmentAttachPoint() const
+{
+	return equipmentAttachPoint;
+}
+
+bool AAbilityShooterCharacter::CanUseEquipment() const
+{
+	return IsAlive();
+}
+
+bool AAbilityShooterCharacter::IsAlive() const
+{
+	return health > 0.f;
+}
+
+bool AAbilityShooterCharacter::CanReload() const
+{
+	return true;
+}
+
+AEquipmentItem* AAbilityShooterCharacter::GetCurrentEquipment() const
+{
+	return currentEquipment;
+}
+
+void AAbilityShooterCharacter::OnRep_CurrentEquipment(AEquipmentItem* lastEquipment)
+{
+	SetCurrentEquipment(currentEquipment, lastEquipment);
+}
+
+void AAbilityShooterCharacter::SetCurrentEquipment(AEquipmentItem* newEquipment, AEquipmentItem* lastEquipment /* = nullptr */)
+{
+	AEquipmentItem* localLastEquipment = nullptr;
+
+	if (IsValid(lastEquipment))
+		localLastEquipment = lastEquipment;
+	else if (newEquipment != currentEquipment)
+		localLastEquipment = currentEquipment;
+
+	if (IsValid(localLastEquipment))
+		localLastEquipment->OnUnEquip();
+
+	currentEquipment = newEquipment;
+
+	if (IsValid(newEquipment))
+	{
+		newEquipment->SetOwningCharacter(this);
+		newEquipment->OnEquip(lastEquipment);
+	}
+}
+
+float AAbilityShooterCharacter::GetMaxHealth() const
+{
+	//@TODO: get the max HP from the Shooter's stats
+	return 100.f;
+}
+
 //////////////////////////////////////////////////////////////////////////
 // Replication
 
@@ -444,7 +660,7 @@ void AAbilityShooterCharacter::GetLifetimeReplicatedProps(TArray< FLifetimePrope
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	// only to local owner: weapon change requests are locally instigated, other clients don't need it
-	//DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, Inventory, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, equipmentInventory, COND_OwnerOnly);
 
 	// everyone except local owner: flag change is locally instigated
 	//DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, bIsTargeting, COND_SkipOwner);
@@ -453,6 +669,6 @@ void AAbilityShooterCharacter::GetLifetimeReplicatedProps(TArray< FLifetimePrope
 	DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, LastTakeHitInfo, COND_Custom);
 
 	// everyone
-	//DOREPLIFETIME(AAbilityShooterCharacter, CurrentWeapon);
+	DOREPLIFETIME(AAbilityShooterCharacter, currentEquipment);
 	DOREPLIFETIME(AAbilityShooterCharacter, health);
 }

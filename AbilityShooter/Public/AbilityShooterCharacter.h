@@ -1,7 +1,10 @@
 #pragma once
 #include "GameFramework/Character.h"
 #include "AbilityShooterTypes.h"
+#include "Sound/SoundCue.h"
 #include "AbilityShooterCharacter.generated.h"
+
+class AEquipmentItem;
 
 UCLASS(config=Game)
 class AAbilityShooterCharacter : public ACharacter
@@ -28,12 +31,72 @@ public:
 
 protected:
 
+	/** default inventory list */
+	UPROPERTY(EditDefaultsOnly, Category = Inventory)
+	TArray<TSubclassOf<AEquipmentItem> > defaultEquipmentList;
+
+	/** current equipment in inventory */
+	UPROPERTY(Transient, Replicated)
+	TArray<AEquipmentItem*> equipmentInventory;
+
 	/** Replicate where this pawn was last hit and damaged */
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_LastTakeHitInfo)
 	struct FTakeHitInfo LastTakeHitInfo;
 
 	/** Time at which point the last take hit info for the actor times out and won't be replicated; Used to stop join-in-progress effects all over the screen */
 	float LastTakeHitTimeTimeout;
+
+	/** socket or bone name for attaching weapon mesh */
+	UPROPERTY(EditDefaultsOnly, Category = Inventory)
+	FName equipmentAttachPoint;
+
+	/** currently equipped equipment */
+	UPROPERTY(Transient, ReplicatedUsing = OnRep_CurrentEquipment)
+	AEquipmentItem* currentEquipment;
+
+	/** effect played on respawn */
+	UPROPERTY(EditDefaultsOnly, Category = Character)
+	UParticleSystem* respawnFX;
+
+	/** sound played on respawn */
+	UPROPERTY(EditDefaultsOnly, Category = Character)
+	USoundCue* respawnSound;
+
+	/** spawn inventory, setup initial variables */
+	virtual void PostInitializeComponents() override;
+
+	/** Update the character. (Running, health etc). */
+	//virtual void Tick(float DeltaSeconds) override;
+
+	/** cleanup inventory */
+	virtual void Destroyed() override;
+
+	/** [server] spawns default inventory */
+	void SpawnDefaultInventory();
+
+	/** [server] remove all weapons from inventory and destroy them */
+	void DestroyInventory();
+
+	/** update mesh for first person view */
+	virtual void PawnClientRestart() override;
+
+	/** [server] perform PlayerState related setup */
+	virtual void PossessedBy(class AController* C) override;
+
+	/** [client] perform PlayerState related setup */
+	virtual void OnRep_PlayerState() override;
+
+	/* adds an equipment item to the inventory */
+	void AddEquipment(AEquipmentItem* item);
+
+	/* removes an equipment item from the inventory */
+	void RemoveEquipment(AEquipmentItem* item);
+
+	/* finds the first instance of a matching class of equipment from inventory */
+	AEquipmentItem* FindEquipment(TSubclassOf<AEquipmentItem> equipmentClass);
+
+	/* equips a weapon from inventory for both the client and server */
+	void EquipEquipment(AEquipmentItem* item);
 
 	/** Called for forwards/backward input */
 	void MoveForward(float Value);
@@ -111,8 +174,16 @@ protected:
 	UFUNCTION()
 	void OnRep_LastTakeHitInfo();
 
+	/** current weapon rep handler */
+	UFUNCTION()
+	void OnRep_CurrentEquipment(AEquipmentItem* lastEquipment);
+
 	/** Called on the actor right before replication occurs */
 	virtual void PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker) override;
+
+	/** equip weapon */
+	UFUNCTION(reliable, server, WithValidation)
+	void ServerEquipEquipment(AEquipmentItem* newEquipment);
 
 public:
 
@@ -144,5 +215,34 @@ public:
 	* @returns true if allowed
 	*/
 	virtual bool Die(float KillingDamage, struct FDamageEvent const& DamageEvent, class AController* Killer, class AActor* DamageCauser);
+
+	/* gets the attach point for equipment */
+	UFUNCTION(BlueprintCallable, Category = Equipment)
+	FName GetEquipmentAttachPoint() const;
+
+	/* whether or not this character can use equipment */
+	bool CanUseEquipment() const;
+
+	/* whether or not the character is alive */
+	UFUNCTION(BlueprintCallable, Category = Health)
+	bool IsAlive() const;
+
+	/** check if character can reload weapon */
+	bool CanReload() const;
+
+	/** get currently equipped equipment */
+	UFUNCTION(BlueprintCallable, Category = "Game|Equipment")
+	AEquipmentItem* GetCurrentEquipment() const;
+
+	/** updates current weapon */
+	void SetCurrentEquipment(AEquipmentItem* newEquipment, AEquipmentItem* lastEquipment = nullptr);
+
+	/** get max health */
+	UFUNCTION(BlueprintCallable, Category=Health)
+	float GetMaxHealth() const;
+
+	/** get aim offsets */
+	UFUNCTION(BlueprintCallable, Category = "Game|Weapon")
+	FRotator GetAimOffsets() const;
 };
 

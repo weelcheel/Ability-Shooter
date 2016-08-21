@@ -18,12 +18,12 @@ AEquipmentItem::AEquipmentItem()
 	mesh->SetCollisionResponseToChannel(COLLISION_PROJECTILE, ECR_Block);
 	RootComponent = mesh;
 
-	bLoopedUseAnim = false;
 	bPlayingUseAnim = false;
 	bIsEquipped = false;
 	bWantsToUse = false;
 	bPendingEquip = false;
 	currentState = EEquipmentState::Idle;
+	bWantsToAlt = false;
 
 	burstCounter = 0;
 	lastUseTime = 0.0f;
@@ -162,6 +162,30 @@ void AEquipmentItem::StopUse()
 	}
 }
 
+void AEquipmentItem::StartAlt()
+{
+	if (Role < ROLE_Authority)
+		ServerStartAlt();
+
+	if (!bWantsToAlt)
+	{
+		bWantsToAlt = true;
+		OnAltStarted();
+	}
+}
+
+void AEquipmentItem::StopAlt()
+{
+	if (Role < ROLE_Authority)
+		ServerStopAlt();
+
+	if (bWantsToAlt)
+	{
+		bWantsToAlt = false;
+		OnAltFinished();
+	}
+}
+
 bool AEquipmentItem::ServerStartUse_Validate()
 {
 	return true;
@@ -180,6 +204,26 @@ bool AEquipmentItem::ServerStopUse_Validate()
 void AEquipmentItem::ServerStopUse_Implementation()
 {
 	StopUse();
+}
+
+bool AEquipmentItem::ServerStartAlt_Validate()
+{
+	return true;
+}
+
+void AEquipmentItem::ServerStartAlt_Implementation()
+{
+	StartAlt();
+}
+
+bool AEquipmentItem::ServerStopAlt_Validate()
+{
+	return true;
+}
+
+void AEquipmentItem::ServerStopAlt_Implementation()
+{
+	StopAlt();
 }
 
 bool AEquipmentItem::CanUse() const
@@ -215,9 +259,9 @@ void AEquipmentItem::HandleUsing()
 		if (Role < ROLE_Authority)
 			ServerHandleUsing();
 
-		bReusing = currentState == EEquipmentState::Using && timeBetweenUses > 0.f;
+		bReusing = currentState == EEquipmentState::Using && timesBetweenUse > 0.f;
 		if (bReusing)
-			GetWorldTimerManager().SetTimer(handleFiringTimer, this, &AEquipmentItem::HandleUsing, timeBetweenUses, false);
+			GetWorldTimerManager().SetTimer(handleFiringTimer, this, &AEquipmentItem::HandleUsing, timesBetweenUse, false);
 	}
 
 	lastUseTime = GetWorld()->GetTimeSeconds();
@@ -264,8 +308,8 @@ void AEquipmentItem::DetermineEquipmentState()
 void AEquipmentItem::OnBurstStarted()
 {
 	const float gameTime = GetWorld()->GetTimeSeconds();
-	if (lastUseTime > 0.f && timeBetweenUses > 0.f && lastUseTime + timeBetweenUses > gameTime)
-		GetWorldTimerManager().SetTimer(handleFiringTimer, this, &AEquipmentItem::HandleUsing, lastUseTime + timeBetweenUses - gameTime, false);
+	if (lastUseTime > 0.f && timesBetweenUse > 0.f && lastUseTime + timesBetweenUse > gameTime)
+		GetWorldTimerManager().SetTimer(handleFiringTimer, this, &AEquipmentItem::HandleUsing, lastUseTime + timesBetweenUse - gameTime, false);
 	else
 		HandleUsing();
 }
@@ -279,6 +323,16 @@ void AEquipmentItem::OnBurstFinished()
 
 	GetWorldTimerManager().ClearTimer(handleFiringTimer);
 	bReusing = false;
+}
+
+void AEquipmentItem::OnAltStarted()
+{
+
+}
+
+void AEquipmentItem::OnAltFinished()
+{
+
 }
 
 UAudioComponent* AEquipmentItem::PlayEquipmentSound(USoundCue* sound)
@@ -401,6 +455,14 @@ void AEquipmentItem::OnRep_BurstCounter()
 		StopSimulatingEquipmentUse();
 }
 
+void AEquipmentItem::OnRep_AltToggle()
+{
+	if (bWantsToAlt)
+		OnAltStarted();
+	else
+		OnAltFinished();
+}
+
 void AEquipmentItem::SimulateEquipmentUse()
 {
 	if (Role == ROLE_Authority && currentState != EEquipmentState::Using)
@@ -445,6 +507,7 @@ void AEquipmentItem::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & Ou
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(AEquipmentItem, characterOwner);
+	DOREPLIFETIME(AEquipmentItem, bWantsToAlt);
 	DOREPLIFETIME_CONDITION(AEquipmentItem, burstCounter, COND_SkipOwner);
 }
 

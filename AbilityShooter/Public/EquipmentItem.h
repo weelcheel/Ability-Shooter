@@ -58,7 +58,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = Sound)
 	USoundCue* equipSound;
 
-	/** animation played on pawn when using (3rd person view) */
+	/** animations played on pawn when using */
 	UPROPERTY(EditDefaultsOnly, Category = Animation)
 	UAnimMontage* useAnim;
 
@@ -66,7 +66,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = Sound)
 	uint32 bLoopedUseSound : 1;
 
-	/** is use animation looped? */
+	/** is use animation looped for the mode? */
 	UPROPERTY(EditDefaultsOnly, Category = Animation)
 	uint32 bLoopedUseAnim : 1;
 
@@ -81,6 +81,10 @@ protected:
 
 	/** is equip animation playing? */
 	uint32 bPendingEquip : 1;
+
+	/* are we currently using alt? */
+	UPROPERTY(Transient, ReplicatedUsing = OnRep_AltToggle)
+	uint32 bWantsToAlt : 1;
 
 	/** weapon is reusing*/
 	uint32 bReusing;
@@ -97,8 +101,9 @@ protected:
 	/** how much time equipment needs to be equipped */
 	float equipDuration;
 
-	/* how much time it takes between uses < 0 means that it only uses once per click */
-	float timeBetweenUses;
+	/* how much time it takes between uses for a mode <= 0 means that it only uses once per click */
+	UPROPERTY(EditDefaultsOnly, Category = Equipment)
+	float timesBetweenUse;
 
 	/** burst counter, used for replicating fire events to remote clients */
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_BurstCounter)
@@ -123,6 +128,12 @@ protected:
 	UFUNCTION(reliable, server, WithValidation)
 	void ServerStopUse();
 
+	UFUNCTION(reliable, server, WithValidation)
+	void ServerStartAlt();
+
+	UFUNCTION(reliable, server, WithValidation)
+	void ServerStopAlt();
+
 	//////////////////////////////////////////////////////////////////////////
 	// Replication & effects
 
@@ -131,6 +142,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_BurstCounter();
+
+	UFUNCTION()
+	void OnRep_AltToggle();
 
 	/** Called in network play to do the cosmetic fx for using */
 	virtual void SimulateEquipmentUse();
@@ -141,7 +155,7 @@ protected:
 	//////////////////////////////////////////////////////////////////////////
 	// Weapon usage
 
-	/** [local] weapon specific fire implementation */
+	/** [local] equipment specific fire implementation */
 	virtual void UseEquipment() PURE_VIRTUAL(AEquipmentItem::UseEquipment, );
 
 	/** [server] use & update any stats needed */
@@ -156,6 +170,12 @@ protected:
 
 	/** [local + server] using finished */
 	virtual void OnBurstFinished();
+
+	/** [local + server] alt started */
+	virtual void OnAltStarted();
+
+	/** [local + server] alt finished */
+	virtual void OnAltFinished();
 
 	/** update equipment state */
 	void SetEquipmentState(EEquipmentState newState);
@@ -182,19 +202,10 @@ protected:
 	bool IsAttachedToCharacter() const;
 
 	//////////////////////////////////////////////////////////////////////////
-	// Input
-
-	/** [local + server] start equipment use */
-	virtual void StartUse();
-
-	/** [local + server] stop equipment use */
-	virtual void StopUse();
-
-	//////////////////////////////////////////////////////////////////////////
 	// Control
 
 	/** check if equipment can be used */
-	bool CanUse() const;
+	virtual bool CanUse() const;
 
 	//////////////////////////////////////////////////////////////////////////
 	// Reading data
@@ -261,4 +272,19 @@ public:
 
 	/** set the weapon's owning pawn */
 	void SetOwningCharacter(AAbilityShooterCharacter* newOwner);
+
+	//////////////////////////////////////////////////////////////////////////
+	// Input
+
+	/** [local + server] start equipment use */
+	virtual void StartUse();
+
+	/** [local + server] stop equipment use */
+	virtual void StopUse();
+
+	/** [local + server] start equipment use */
+	virtual void StartAlt();
+
+	/** [local + server] stop equipment use */
+	virtual void StopAlt();
 };

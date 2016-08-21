@@ -62,6 +62,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = Character)
 	USoundCue* respawnSound;
 
+	/* does this character want to use their equipment? */
+	bool bWantsToUse = false;
+
+	/* does this character want to use their equipment's alt? */
+	bool bWantsToUseAlt = false;
+
 	/** spawn inventory, setup initial variables */
 	virtual void PostInitializeComponents() override;
 

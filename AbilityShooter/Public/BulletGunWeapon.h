@@ -4,6 +4,21 @@
 #include "BulletGunWeapon.generated.h"
 
 USTRUCT()
+struct FInstantHitInfo
+{
+	GENERATED_USTRUCT_BODY()
+
+	UPROPERTY()
+	FVector origin;
+
+	UPROPERTY()
+	float reticleSpread;
+
+	UPROPERTY()
+	int32 randomSeed;
+};
+
+USTRUCT()
 struct FBulletWeaponData
 {
 	GENERATED_USTRUCT_BODY()
@@ -32,6 +47,46 @@ struct FBulletWeaponData
 	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
 	float noAnimReloadDuration;
 
+	/** base weapon spread (degrees) */
+	UPROPERTY(EditDefaultsOnly, Category = Accuracy)
+	float weaponSpread;
+
+	/** targeting spread modifier */
+	UPROPERTY(EditDefaultsOnly, Category = Accuracy)
+	float targetingSpreadMod;
+
+	/** continuous firing: spread increment */
+	UPROPERTY(EditDefaultsOnly, Category = Accuracy)
+	float firingSpreadIncrement;
+
+	/** continuous firing: max increment */
+	UPROPERTY(EditDefaultsOnly, Category = Accuracy)
+	float firingSpreadMax;
+
+	/** weapon range */
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+	float weaponRange;
+
+	/** damage amount */
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+	int32 hitDamage;
+
+	/** type of damage */
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+	TSubclassOf<UDamageType> damageType;
+
+	/** hit verification: scale for bounding box of hit actor */
+	UPROPERTY(EditDefaultsOnly, Category = HitVerification)
+	float clientSideHitLeeway;
+
+	/** hit verification: threshold for dot product between view direction and hit direction */
+	UPROPERTY(EditDefaultsOnly, Category = HitVerification)
+	float allowedViewDotHitDir;
+
+	/** scale to multiply or divide the camera boom length by for aiming */
+	UPROPERTY(EditDefaultsOnly, Category = HitVerification)
+	float aimingScale;
+
 	FBulletWeaponData()
 	{
 		bInfiniteAmmo = false;
@@ -40,6 +95,17 @@ struct FBulletWeaponData
 		ammoPerClip = 32;
 		initialClips = 4;
 		noAnimReloadDuration = 1.f;
+
+		weaponSpread = 5.0f;
+		targetingSpreadMod = 0.25f;
+		firingSpreadIncrement = 1.0f;
+		firingSpreadMax = 10.0f;
+		weaponRange = 10000.0f;
+		hitDamage = 10;
+		damageType = UDamageType::StaticClass();
+		clientSideHitLeeway = 200.0f;
+		allowedViewDotHitDir = 0.8f;
+		aimingScale = 0.5f;
 	}
 };
 
@@ -49,6 +115,10 @@ class ABulletGunWeapon : public AWeapon
 	GENERATED_BODY()
 
 protected:
+
+	/** instant hit notify for replication */
+	UPROPERTY(Transient, ReplicatedUsing = OnRep_HitNotify)
+	FInstantHitInfo hitNotify;
 
 	/** is reload animation playing? */
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_Reload)
@@ -65,6 +135,17 @@ protected:
 	/** spawned component for muzzle FX */
 	UPROPERTY(Transient)
 	UParticleSystemComponent* muzzlePSC;
+
+	/** smoke trail */
+	UPROPERTY(EditDefaultsOnly, Category = Effects)
+	UParticleSystem* trailFX;
+
+	/** param name for beam target in smoke trail */
+	UPROPERTY(EditDefaultsOnly, Category = Effects)
+	FName trailTargetParam;
+
+	/** current spread from continuous firing */
+	float currentFiringSpread;
 
 	/** out of ammo sound */
 	UPROPERTY(EditDefaultsOnly, Category = Sound)
@@ -137,17 +218,67 @@ protected:
 	/** check if weapon can be reloaded */
 	bool CanReload() const;
 
+	/** check if weapon can be fired */
+	virtual bool CanUse() const override;
+
 	//////////////////////////////////////////////////////////////////////////
 	// Weapon usage
 
 	/* add more state logic for reloading */
 	virtual void DetermineEquipmentState() override;
 
+	/** server notified of hit from client to verify */
+	UFUNCTION(reliable, server, WithValidation)
+	void ServerNotifyHit(const FHitResult Impact, FVector_NetQuantizeNormal ShootDir, int32 RandomSeed, float ReticleSpread);
+
+	/** server notified of miss to show trail FX */
+	UFUNCTION(unreliable, server, WithValidation)
+	void ServerNotifyMiss(FVector_NetQuantizeNormal ShootDir, int32 RandomSeed, float ReticleSpread);
+
+	/** process the instant hit and notify the server if necessary */
+	void ProcessInstantHit(const FHitResult& Impact, const FVector& Origin, const FVector& ShootDir, int32 RandomSeed, float ReticleSpread);
+
+	/** continue processing the instant hit, as if it has been confirmed by the server */
+	void ProcessInstantHit_Confirmed(const FHitResult& Impact, const FVector& Origin, const FVector& ShootDir, int32 RandomSeed, float ReticleSpread);
+
+	/** check if weapon should deal damage to actor */
+	bool ShouldDealDamage(AActor* TestActor) const;
+
+	/** handle damage */
+	void DealDamage(const FHitResult& Impact, const FVector& ShootDir);
+
+	/** [local] weapon specific fire implementation */
+	virtual void UseEquipment() override;
+
+	/* [local] instant hit weapon fire logic */
+	void FireWeapon();
+
+	/** [local + server] update spread on firing */
+	virtual void OnBurstFinished() override;
+
+	/** [local + server] handle weapon firing */
+	virtual void HandleUsing();
+
+	virtual void OnAltStarted() override;
+	virtual void OnAltFinished() override;
+
 	//////////////////////////////////////////////////////////////////////////
 	// Replication & effects
 
 	UFUNCTION()
 	void OnRep_Reload();
+
+	UFUNCTION()
+	void OnRep_HitNotify();
+
+	/** called in network play to do the cosmetic fx  */
+	void SimulateInstantHit(const FVector& Origin, int32 RandomSeed, float ReticleSpread);
+
+	/** spawn effects for impact */
+	void SpawnImpactEffects(const FHitResult& Impact);
+
+	/** spawn trail effect */
+	void SpawnTrailEffect(const FVector& EndPoint);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Weapon usage helpers

@@ -502,18 +502,42 @@ void AAbilityShooterCharacter::TouchStopped(ETouchIndex::Type FingerIndex, FVect
 
 void AAbilityShooterCharacter::PrimaryUseStart()
 {
+	if (!bWantsToUse)
+	{
+		bWantsToUse = true;
+		if (IsValid(currentEquipment))
+			currentEquipment->StartUse();
+	}
 }
 
 void AAbilityShooterCharacter::PrimaryUseStop()
 {
+	if (bWantsToUse)
+	{
+		bWantsToUse = false;
+		if (IsValid(currentEquipment))
+			currentEquipment->StopUse();
+	}
 }
 
 void AAbilityShooterCharacter::AlternateUseStart()
 {
+	if (!bWantsToUseAlt)
+	{
+		bWantsToUseAlt = true;
+		if (IsValid(currentEquipment))
+			currentEquipment->StartAlt();
+	}
 }
 
 void AAbilityShooterCharacter::AlternateUseStop()
 {
+	if (bWantsToUseAlt)
+	{
+		bWantsToUseAlt = false;
+		if (IsValid(currentEquipment))
+			currentEquipment->StopAlt();
+	}
 }
 
 void AAbilityShooterCharacter::OnStartAbility(int32 abilityIndex)
@@ -528,34 +552,12 @@ void AAbilityShooterCharacter::TurnAtRate(float Rate)
 {
 	// calculate delta for this frame from the rate information
 	AddControllerYawInput(Rate * BaseTurnRate * GetWorld()->GetDeltaSeconds());
-
-	if (GetVelocity().SizeSquared() <= 0.f)
-	{
-		// find out which way is forward
-		const FRotator Rotation = Controller->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
-
-		// get forward vector
-		const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-		AddMovementInput(Direction, 0.01f);
-	}
 }
 
 void AAbilityShooterCharacter::LookUpAtRate(float Rate)
 {
 	// calculate delta for this frame from the rate information
 	AddControllerPitchInput(Rate * BaseLookUpRate * GetWorld()->GetDeltaSeconds());
-
-	if (GetVelocity().SizeSquared() <= 0.f)
-	{
-		// find out which way is forward
-		const FRotator Rotation = Controller->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
-
-		// get forward vector
-		const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-		AddMovementInput(Direction, 0.01f);
-	}
 }
 
 void AAbilityShooterCharacter::MoveForward(float Value)

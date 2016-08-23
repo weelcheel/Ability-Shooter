@@ -160,7 +160,7 @@ protected:
 
 	/** [server] use & update any stats needed */
 	UFUNCTION(reliable, server, WithValidation)
-	void ServerHandleUsing();
+	virtual void ServerHandleUsing();
 
 	/** [local + server] handle equipment use */
 	virtual void HandleUsing();

@@ -646,6 +646,11 @@ float AAbilityShooterCharacter::GetMaxHealth() const
 	return 100.f;
 }
 
+float AAbilityShooterCharacter::GetADSWeaponSpread() const
+{
+	return 0.4f;
+}
+
 //////////////////////////////////////////////////////////////////////////
 // Replication
 

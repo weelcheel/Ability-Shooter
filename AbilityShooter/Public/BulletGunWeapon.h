@@ -85,7 +85,11 @@ struct FBulletWeaponData
 
 	/** scale to multiply or divide the camera boom length by for aiming */
 	UPROPERTY(EditDefaultsOnly, Category = HitVerification)
-	float aimingScale;
+	float aimingCamScale;
+
+	/** scale to multiply or divide the character's movement speed by for aiming */
+	UPROPERTY(EditDefaultsOnly, Category = HitVerification)
+	float aimingMoveScale;
 
 	FBulletWeaponData()
 	{
@@ -105,7 +109,8 @@ struct FBulletWeaponData
 		damageType = UDamageType::StaticClass();
 		clientSideHitLeeway = 200.0f;
 		allowedViewDotHitDir = 0.8f;
-		aimingScale = 0.5f;
+		aimingCamScale = 0.5f;
+		aimingMoveScale = 0.67f;
 	}
 };
 
@@ -234,6 +239,10 @@ protected:
 	/** server notified of miss to show trail FX */
 	UFUNCTION(unreliable, server, WithValidation)
 	void ServerNotifyMiss(FVector_NetQuantizeNormal ShootDir, int32 RandomSeed, float ReticleSpread);
+
+	/** [server] override super to use ammo */
+	UFUNCTION(reliable, server, WithValidation)
+	virtual void ServerHandleUsing() override;
 
 	/** process the instant hit and notify the server if necessary */
 	void ProcessInstantHit(const FHitResult& Impact, const FVector& Origin, const FVector& ShootDir, int32 RandomSeed, float ReticleSpread);

@@ -62,12 +62,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = Character)
 	USoundCue* respawnSound;
 
-	/* does this character want to use their equipment? */
-	bool bWantsToUse = false;
-
-	/* does this character want to use their equipment's alt? */
-	bool bWantsToUseAlt = false;
-
 	/** spawn inventory, setup initial variables */
 	virtual void PostInitializeComponents() override;
 
@@ -201,6 +195,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Health)
 	uint32 bIsDying : 1;
 
+	/* does this character want to use their equipment? */
+	UPROPERTY(BlueprintReadOnly, Category = Use)
+	bool bWantsToUse = false;
+
+	/* does this character want to use their equipment's alt? */
+	UPROPERTY(BlueprintReadOnly, Category = Use)
+	bool bWantsToUseAlt = false;
+
 	/** Returns CameraBoom subobject **/
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	/** Returns FollowCamera subobject **/
@@ -250,5 +252,8 @@ public:
 	/** get aim offsets */
 	UFUNCTION(BlueprintCallable, Category = "Game|Weapon")
 	FRotator GetAimOffsets() const;
+
+	/* gets the percent of reduction in max weapon spread while this character is aiming down sights */
+	float GetADSWeaponSpread() const;
 };
 

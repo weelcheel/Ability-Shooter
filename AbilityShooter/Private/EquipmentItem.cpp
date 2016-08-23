@@ -327,12 +327,14 @@ void AEquipmentItem::OnBurstFinished()
 
 void AEquipmentItem::OnAltStarted()
 {
-
+	if (IsValid(characterOwner))
+		characterOwner->bWantsToUseAlt = true;
 }
 
 void AEquipmentItem::OnAltFinished()
 {
-
+	if (IsValid(characterOwner))
+		characterOwner->bWantsToUseAlt = false;
 }
 
 UAudioComponent* AEquipmentItem::PlayEquipmentSound(USoundCue* sound)

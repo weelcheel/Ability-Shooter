@@ -2,6 +2,7 @@
 #include "BulletGunWeapon.h"
 #include "UnrealNetwork.h"
 #include "AbilityShooterCharacter.h"
+#include "DrawDebugHelpers.h"
 
 ABulletGunWeapon::ABulletGunWeapon()
 {
@@ -40,9 +41,9 @@ void ABulletGunWeapon::StartReload(bool bFromReplication /* = false */)
 		if (animDuration <= 0.f)
 			animDuration = weaponConfig.noAnimReloadDuration;
 
-		GetWorldTimerManager().SetTimer(stopReloadTimer, this, &ABulletGunWeapon::StopReload, animDuration, false);
-		if (Role == ROLE_Authority)
-			GetWorldTimerManager().SetTimer(reloadTimer, this, &ABulletGunWeapon::ReloadWeapon, FMath::Max(0.1f, animDuration - 0.1f), false);
+		//GetWorldTimerManager().SetTimer(stopReloadTimer, this, &ABulletGunWeapon::StopReload, animDuration, false);
+		//if (Role == ROLE_Authority)
+		GetWorldTimerManager().SetTimer(reloadTimer, this, &ABulletGunWeapon::ReloadWeapon, FMath::Max(0.1f, animDuration - 0.1f), false);
 
 		if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
 			PlayEquipmentSound(reloadSound);
@@ -56,6 +57,8 @@ void ABulletGunWeapon::StopReload()
 		bPendingReload = false;
 		DetermineEquipmentState();
 		StopEquipmentAnimation(reloadAnim);
+
+		GetWorldTimerManager().ClearTimer(reloadTimer);
 	}
 }
 
@@ -87,7 +90,7 @@ void ABulletGunWeapon::ClientStartReload_Implementation()
 bool ABulletGunWeapon::CanReload() const
 {
 	bool bCanReload = !characterOwner || characterOwner->CanReload();
-	bool bHasAmmo = currentAmmoInClip < weaponConfig.ammoPerClip && (currentAmmo - currentAmmoInClip > 0 || weaponConfig.bInfiniteClip);
+	bool bHasAmmo = (currentAmmoInClip < weaponConfig.ammoPerClip) && (currentAmmo - currentAmmoInClip > 0 || weaponConfig.bInfiniteClip);
 	bool bStateOk = currentState == EEquipmentState::Idle || currentState == EEquipmentState::Using;
 
 	return bCanReload && bHasAmmo && bStateOk;
@@ -141,8 +144,16 @@ void ABulletGunWeapon::FireWeapon()
 	const FVector shootDir = weapRandom.VRandCone(aimDir, coneHalfAngle, coneHalfAngle);
 	const FVector endTrace = startTrace + shootDir * weaponConfig.weaponRange;
 
-	const FHitResult impact = EquipmentTrace(startTrace, endTrace);
-	ProcessInstantHit(impact, startTrace, shootDir, randomSeed, currentSpread);
+	FHitResult impact = EquipmentTrace(startTrace, endTrace);
+	DrawDebugLine(GetWorld(), startTrace, endTrace, FColor::Cyan, true, 5.f, 0, 0.5f);
+	if (impact.bBlockingHit)
+	{
+		const FVector origin = GetMuzzleLocation();
+		impact = EquipmentTrace(origin, impact.ImpactPoint);
+		DrawDebugLine(GetWorld(), origin, impact.ImpactPoint, FColor::Red, true, 5.f, 0, 0.5f);
+
+		ProcessInstantHit(impact, origin, shootDir, randomSeed, currentSpread);
+	}
 
 	currentFiringSpread = FMath::Min(weaponConfig.firingSpreadMax, currentFiringSpread + weaponConfig.firingSpreadIncrement);
 }
@@ -163,7 +174,7 @@ void ABulletGunWeapon::ServerNotifyHit_Implementation(const FHitResult Impact, F
 		const FVector viewDir = (Impact.Location - origin).GetSafeNormal();
 
 		//is the angle between the hit and view within the allowed limits? (limit + weapon max angle)
-		const float viewDotHitDir = FVector::DotProduct(Instigator->GetViewRotation().Vector(), viewDir);
+		const float viewDotHitDir = FMath::Abs(FVector::DotProduct(Instigator->GetViewRotation().Vector(), viewDir));
 		if (viewDotHitDir > weaponConfig.allowedViewDotHitDir - weaponAngleDot)
 		{
 			if (currentState != EEquipmentState::Idle)
@@ -173,31 +184,33 @@ void ABulletGunWeapon::ServerNotifyHit_Implementation(const FHitResult Impact, F
 					if (Impact.bBlockingHit)
 						ProcessInstantHit_Confirmed(Impact, origin, ShootDir, RandomSeed, ReticleSpread);
 				}
-			}
-			else if (Impact.GetActor()->IsRootComponentStatic() || Impact.GetActor()->IsRootComponentStationary()) //not really significant if it's just environment
-				ProcessInstantHit_Confirmed(Impact, origin, ShootDir, RandomSeed, ReticleSpread);
-			else
-			{
-				//get the component bounding box
-				const FBox hitBox = Impact.GetActor()->GetComponentsBoundingBox();
-
-				//calculate that box's extent
-				FVector boxExtent = 0.5f * (hitBox.Max - hitBox.Min);
-				boxExtent *= weaponConfig.clientSideHitLeeway;
-
-				//avoid precision errors with really thin objects
-				boxExtent.X = FMath::Max(20.f, boxExtent.X);
-				boxExtent.Y = FMath::Max(20.f, boxExtent.Y);
-				boxExtent.Z = FMath::Max(20.f, boxExtent.Z);
-
-				//get the box center
-				const FVector boxCenter = (hitBox.Min + hitBox.Max) * 0.5f;
-
-				//if we are within client tolerance
-				if (FMath::Abs(Impact.Location.Z - boxCenter.Z) < boxExtent.Z && FMath::Abs(Impact.Location.X - boxCenter.X) < boxExtent.X && FMath::Abs(Impact.Location.Y - boxCenter.Y) < boxExtent.Y)
+				else if (Impact.GetActor()->IsRootComponentStatic() || Impact.GetActor()->IsRootComponentStationary()) //not really significant if it's just environment
 					ProcessInstantHit_Confirmed(Impact, origin, ShootDir, RandomSeed, ReticleSpread);
 				else
-					UE_LOG(LogTemp, Log, TEXT("%s Rejected client side hit of %s (outside bounding box tolerance)"), *GetNameSafe(this), *GetNameSafe(Impact.GetActor()));
+				{
+					//get the component bounding box
+					const FBox hitBox = Impact.GetActor()->GetComponentsBoundingBox();
+
+					//calculate that box's extent
+					FVector boxExtent = 0.5f * (hitBox.Max - hitBox.Min);
+					boxExtent *= weaponConfig.clientSideHitLeeway;
+
+					//avoid precision errors with really thin objects
+					boxExtent.X = FMath::Max(20.f, boxExtent.X);
+					boxExtent.Y = FMath::Max(20.f, boxExtent.Y);
+					boxExtent.Z = FMath::Max(20.f, boxExtent.Z);
+
+					//get the box center
+					const FVector boxCenter = (hitBox.Min + hitBox.Max) * 0.5f;
+
+					//if we are within client tolerance
+					if (FMath::Abs(Impact.Location.Z - boxCenter.Z) < boxExtent.Z && FMath::Abs(Impact.Location.X - boxCenter.X) < boxExtent.X && FMath::Abs(Impact.Location.Y - boxCenter.Y) < boxExtent.Y)
+					{
+						ProcessInstantHit_Confirmed(Impact, origin, ShootDir, RandomSeed, ReticleSpread);
+					}
+					else
+						UE_LOG(LogTemp, Log, TEXT("%s Rejected client side hit of %s (outside bounding box tolerance)"), *GetNameSafe(this), *GetNameSafe(Impact.GetActor()));
+				}
 			}
 		}
 		else if (viewDotHitDir <= weaponConfig.allowedViewDotHitDir)
@@ -324,6 +337,8 @@ void ABulletGunWeapon::ReloadWeapon()
 
 	if (weaponConfig.bInfiniteClip)
 		currentAmmo = FMath::Max(currentAmmoInClip, currentAmmo);
+
+	StopReload();
 }
 
 void ABulletGunWeapon::DetermineEquipmentState()
@@ -450,25 +465,62 @@ void ABulletGunWeapon::HandleUsing()
 	lastUseTime = GetWorld()->GetTimeSeconds();
 }
 
+bool ABulletGunWeapon::ServerHandleUsing_Validate()
+{
+	return true;
+}
+
+void ABulletGunWeapon::ServerHandleUsing_Implementation()
+{
+	HandleUsing();
+
+	if (currentAmmoInClip > 0 && CanUse())
+	{
+		//upadte ammo on the server
+		UseAmmo();
+
+		//make sure other clients are being replicated to
+		burstCounter++;
+	}
+}
+
 void ABulletGunWeapon::OnAltStarted()
 {
+	Super::OnAltStarted();
+
 	if (IsValid(characterOwner))
 	{
+		//zoom the camera in and make the character aim at the view rotation
 		characterOwner->GetFollowCamera()->bUsePawnControlRotation = true;
 		characterOwner->bUseControllerRotationYaw = true;
 		characterOwner->GetCharacterMovement()->bOrientRotationToMovement = false;
-		characterOwner->GetCameraBoom()->TargetArmLength *= weaponConfig.aimingScale;
+		characterOwner->GetCharacterMovement()->MaxWalkSpeed *= weaponConfig.aimingMoveScale;
+		characterOwner->GetCameraBoom()->TargetArmLength *= weaponConfig.aimingCamScale;
+		characterOwner->GetCameraBoom()->SocketOffset.Y += 50.f;
+		//characterOwner->GetCameraBoom()->TargetArmLength = FMath::FInterpConstantTo(characterOwner->GetCameraBoom()->TargetArmLength, characterOwner->GetCameraBoom()->TargetArmLength * weaponConfig.aimingCamScale, GetWorld()->DeltaTimeSeconds, 45.f);
+
+		//make the weapon more accurate while aiming down sights
+		weaponConfig.firingSpreadMax *= characterOwner->GetADSWeaponSpread();
+		weaponConfig.firingSpreadIncrement *= characterOwner->GetADSWeaponSpread();
 	}
 }
 
 void ABulletGunWeapon::OnAltFinished()
 {
+	Super::OnAltFinished();
+
 	if (IsValid(characterOwner))
 	{
 		characterOwner->GetFollowCamera()->bUsePawnControlRotation = false;
 		characterOwner->bUseControllerRotationYaw = false;
 		characterOwner->GetCharacterMovement()->bOrientRotationToMovement = true;
-		characterOwner->GetCameraBoom()->TargetArmLength /= weaponConfig.aimingScale;
+		characterOwner->GetCharacterMovement()->MaxWalkSpeed /= weaponConfig.aimingMoveScale;
+		characterOwner->GetCameraBoom()->TargetArmLength /= weaponConfig.aimingCamScale;
+		characterOwner->GetCameraBoom()->SocketOffset.Y -= 50.f;
+		//characterOwner->GetCameraBoom()->TargetArmLength = FMath::FInterpConstantTo(characterOwner->GetCameraBoom()->TargetArmLength, characterOwner->GetCameraBoom()->TargetArmLength / weaponConfig.aimingCamScale, GetWorld()->DeltaTimeSeconds, 45.f);
+
+		weaponConfig.firingSpreadMax /= characterOwner->GetADSWeaponSpread();
+		weaponConfig.firingSpreadIncrement /= characterOwner->GetADSWeaponSpread();
 	}
 }
 

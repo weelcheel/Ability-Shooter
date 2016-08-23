@@ -8,6 +8,15 @@ class AAbilityShooterGameMode : public AGameMode
 {
 	GENERATED_BODY()
 
+protected:
+
+	/* base time value for player respawns */
+	UPROPERTY(EditDefaultsOnly, Category = Respawn)
+	float basePlayerRespawnTime;
+
+	/* gets the respawn timer for the player */
+	float GetRespawnTime(class AAbilityShooterPlayerController* player) const;
+
 public:
 	AAbilityShooterGameMode();
 

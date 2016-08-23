@@ -3,6 +3,8 @@
 #include "AbilityShooter.h"
 #include "AbilityShooterGameMode.h"
 #include "AbilityShooterCharacter.h"
+#include "AbilityShooterPlayerController.h"
+#include "ASPlayerState.h"
 
 AAbilityShooterGameMode::AAbilityShooterGameMode()
 {
@@ -12,9 +14,26 @@ AAbilityShooterGameMode::AAbilityShooterGameMode()
 	{
 		DefaultPawnClass = PlayerPawnBPClass.Class;
 	}
+
+	PlayerControllerClass = AAbilityShooterPlayerController::StaticClass();
+	PlayerStateClass = AASPlayerState::StaticClass();
+
+	basePlayerRespawnTime = 10.f;
 }
 
 void AAbilityShooterGameMode::ShooterKilled(AController* Killer, AController* KilledPlayer, APawn* KilledPawn, const UDamageType* DamageType)
 {
 	//@TODO: notify player states about Shooter deaths
+
+	AAbilityShooterPlayerController* respawningPlayer = Cast<AAbilityShooterPlayerController>(KilledPlayer);
+	if (IsValid(respawningPlayer))
+		respawningPlayer->SetRespawnTimer(GetRespawnTime(respawningPlayer));
+}
+
+float AAbilityShooterGameMode::GetRespawnTime(AAbilityShooterPlayerController* player) const
+{
+	//respawn timers grow as the game goes on, 1.5 seconds for each minute passed in-game
+	//@TODO: players' abilities will need to modify this value
+
+	return basePlayerRespawnTime + ((GetWorld()->TimeSeconds / 60.f) * 1.5f);
 }

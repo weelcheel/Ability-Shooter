@@ -149,8 +149,8 @@ void ABulletGunWeapon::FireWeapon()
 	if (impact.bBlockingHit)
 	{
 		const FVector origin = GetMuzzleLocation();
-		impact = EquipmentTrace(origin, impact.ImpactPoint);
-		DrawDebugLine(GetWorld(), origin, impact.ImpactPoint, FColor::Red, true, 5.f, 0, 0.5f);
+		impact = EquipmentTrace(origin, impact.Location);
+		DrawDebugLine(GetWorld(), origin, impact.Location, FColor::Red, true, 5.f, 0, 0.5f);
 
 		ProcessInstantHit(impact, origin, shootDir, randomSeed, currentSpread);
 	}

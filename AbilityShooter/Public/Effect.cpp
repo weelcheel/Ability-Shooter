@@ -51,6 +51,9 @@ void UEffect::Initialize(const FEffectInitInfo& initInfo, AAbilityShooterCharact
 	statAlters = initInfo.statAlters;
 	bPersistThruDeath = initInfo.bDoesPersistThruDeath;
 	expirationTimer = initInfo.persistentTimer;
+
+	if (initInfo.persistentKey != "")
+		key = initInfo.persistentKey;
 	
 	bEffectInitialized = true;
 }

@@ -415,28 +415,19 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FDamageEvent const &
 				FEffectInitInfo persistentInfo;
 				persistentInfo.bDoesPersistThruDeath = effect->bPersistThruDeath;
 				persistentInfo.description = effect->description;
-				persistentInfo.duration = effect->duration;
+				persistentInfo.duration = GetWorldTimerManager().GetTimerRemaining(effect->expirationTimer) > 0.f ? GetWorldTimerManager().GetTimerRemaining(effect->expirationTimer) : 0.f;
+				persistentInfo.persistentTime = GetWorld()->TimeSeconds;
 				persistentInfo.effectType = effect->GetClass();
 				persistentInfo.statAlters = effect->statAlters;
 				persistentInfo.uiName = effect->uiName;
 				persistentInfo.persistentTimer = effect->expirationTimer;
+				persistentInfo.persistentKey = effect->key;
 
 				pc->persistentEffects.Add(persistentInfo);
 			}
 		}
 
-		if (effect->bPersistThruDeath)
-			currentEffects.RemoveAt(i);
-		else
-			EndEffect(effect);
-
-		if (IsValid(pc))
-		{
-			APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
-			if (IsValid(hud))
-				hud->OnEffectsListUpdate();
-		}
-
+		EndEffect(effect);
 		i--;
 	}
 	
@@ -724,9 +715,8 @@ void AAbilityShooterCharacter::ApplyEffect_Implementation(AAbilityShooterCharact
 	newEffect->key = newKey;
 	newEffect->Initialize(initInfo, this);
 
-	//only start the expiration timer if it hasn't been started yet
-	if (GetWorldTimerManager().GetTimerRemaining(newEffect->expirationTimer) <= 0.f)
-		newEffect->SetExpirationTimer();
+	//start this expiration timer with the needed time and add it to the list of effects
+	newEffect->SetExpirationTimer();
 	currentEffects.AddUnique(newEffect);
 
 	//notify the player HUD that the current effects have changed

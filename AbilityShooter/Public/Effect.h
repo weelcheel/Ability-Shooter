@@ -151,6 +151,9 @@ struct FEffectInitInfo
 	/* key for if this effect is persisting through death */
 	FString persistentKey;
 
+	/* game time this persistent effect was removed from the character */
+	float persistentTime;
+
 	FEffectInitInfo()
 	{
 		uiName = FText::GetEmpty();
@@ -159,5 +162,6 @@ struct FEffectInitInfo
 		duration = -1.f;
 		bDoesPersistThruDeath = false;
 		effectType = UEffect::StaticClass();
+		persistentTime = -1.f;
 	}
 };

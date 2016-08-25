@@ -40,8 +40,14 @@ void AAbilityShooterPlayerController::HandleRespawnTimer()
 			{
 				for (int32 i = 0; i < persistentEffects.Num(); i++)
 				{
-					if ((persistentEffects[i].duration > 0.f && GetWorldTimerManager().GetTimerRemaining(persistentEffects[i].persistentTimer) > 0.f) || persistentEffects[i].duration <= 0.f)
-						ownedCharacter->ApplyEffect(nullptr, persistentEffects[i]);
+					if (persistentEffects[i].persistentTime >= 0.f)
+					{
+						persistentEffects[i].duration -= GetWorld()->TimeSeconds - persistentEffects[i].persistentTime;
+						if (persistentEffects[i].duration <= 0.f)
+							continue;
+					}
+						
+					ownedCharacter->ApplyEffect(nullptr, persistentEffects[i]);
 				}
 
 				persistentEffects.Empty();

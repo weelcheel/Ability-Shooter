@@ -2,6 +2,7 @@
 #include "GameFramework/Character.h"
 #include "AbilityShooterTypes.h"
 #include "Sound/SoundCue.h"
+#include "Effect.h"
 #include "AbilityShooterCharacter.generated.h"
 
 class AEquipmentItem;
@@ -61,6 +62,10 @@ protected:
 	/** sound played on respawn */
 	UPROPERTY(EditDefaultsOnly, Category = Character)
 	USoundCue* respawnSound;
+
+	/* array of effects currently afflicting this character */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Effects)
+	TArray<UEffect*> currentEffects;
 
 	/** spawn inventory, setup initial variables */
 	virtual void PostInitializeComponents() override;
@@ -255,5 +260,21 @@ public:
 
 	/* gets the percent of reduction in max weapon spread while this character is aiming down sights */
 	float GetADSWeaponSpread() const;
+
+	/* applies an effect to this character */
+	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Effect)
+	void ApplyEffect(AAbilityShooterCharacter* originChar, const FEffectInitInfo& initInfo);
+
+	/* [SERVER] ends and removes an effect that's currently affecting this character */
+	UFUNCTION(BlueprintCallable, Category = Effect)
+	void EndEffect(UEffect* endingEffect);
+
+	/* [CLIENT] ends an effect on clients */
+	UFUNCTION(reliable, client)
+	void ClientEndEffect(const FString& key);
+
+	/* gets the current value (modified by effects) for a stat */
+	UFUNCTION(BlueprintCallable, Category = Effect)
+	float GetCurrentStat(EStat stat) const;
 };
 

@@ -651,6 +651,95 @@ float AAbilityShooterCharacter::GetADSWeaponSpread() const
 	return 0.4f;
 }
 
+void AAbilityShooterCharacter::ApplyEffect_Implementation(AAbilityShooterCharacter* originChar, const FEffectInitInfo& initInfo)
+{
+	//generate key
+	FString newKey = "";
+	if (IsValid(originChar))
+		newKey += originChar->GetName() + "_";
+	newKey += initInfo.uiName.ToString() + "_" + GetName();
+
+	//don't apply more than once
+	for (UEffect* effect : currentEffects)
+	{
+		if (effect->GetKey() == newKey)
+			return;
+	}
+
+	//create and initialize the effect
+	UEffect* newEffect = NewObject<UEffect>(this, initInfo.effectType);
+	if (!IsValid(newEffect))
+		return;
+
+	newEffect->key = newKey;
+	newEffect->Initialize(initInfo, this);
+
+	//if we're not the server, just set the expiration timer and add
+	newEffect->SetExpirationTimer();
+	if (Role < ROLE_Authority)
+	{
+		currentEffects.AddUnique(newEffect);
+		return;
+	}
+
+	//blueprint on application event
+	newEffect->OnEffectAppliedToCharacter(this);
+
+	//finally add the effect
+	currentEffects.AddUnique(newEffect);
+}
+
+void AAbilityShooterCharacter::EndEffect(UEffect* endingEffect)
+{
+	if (!IsValid(endingEffect) || Role < ROLE_Authority)
+		return;
+
+	//clear the effects timer
+	GetWorldTimerManager().ClearTimer(endingEffect->expirationTimer);
+
+	//let the effect do any blueprint operations
+	endingEffect->OnEffectRemovedFromCharacter(this);
+
+	//remove the effect from our arrays
+	currentEffects.Remove(endingEffect);
+	ClientEndEffect(endingEffect->GetKey());
+}
+
+void AAbilityShooterCharacter::ClientEndEffect_Implementation(const FString& key)
+{
+	for (int32 i = 0; i < currentEffects.Num(); i++)
+	{
+		if (currentEffects[i]->GetKey() == key)
+		{
+			GetWorldTimerManager().ClearTimer(currentEffects[i]->expirationTimer);
+			currentEffects.RemoveAt(i);
+		}
+	}
+}
+
+float AAbilityShooterCharacter::GetCurrentStat(EStat stat) const
+{
+	float statDelta = 1.f;
+	for (UEffect* effect : currentEffects)
+	{
+		for (int32 i = 0; i < effect->statAlters.Num(); i++)
+		{
+			if (effect->statAlters[i].effectToAlter == stat)
+				statDelta += effect->statAlters[i].deltaStat;
+		}
+	}
+
+	switch (stat)
+	{
+	case EStat::ES_EquipUseRate:
+		if (IsValid(currentEquipment))
+			return currentEquipment->timesBetweenUse * statDelta;
+		break;
+	}
+
+	return 0.f;
+}
+
 //////////////////////////////////////////////////////////////////////////
 // Replication
 

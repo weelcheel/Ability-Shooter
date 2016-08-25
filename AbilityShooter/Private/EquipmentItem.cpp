@@ -259,9 +259,9 @@ void AEquipmentItem::HandleUsing()
 		if (Role < ROLE_Authority)
 			ServerHandleUsing();
 
-		bReusing = currentState == EEquipmentState::Using && timesBetweenUse > 0.f;
+		bReusing = currentState == EEquipmentState::Using && characterOwner->GetCurrentStat(EStat::ES_EquipUseRate) > 0.f;
 		if (bReusing)
-			GetWorldTimerManager().SetTimer(handleFiringTimer, this, &AEquipmentItem::HandleUsing, timesBetweenUse, false);
+			GetWorldTimerManager().SetTimer(handleFiringTimer, this, &AEquipmentItem::HandleUsing, characterOwner->GetCurrentStat(EStat::ES_EquipUseRate), false);
 	}
 
 	lastUseTime = GetWorld()->GetTimeSeconds();

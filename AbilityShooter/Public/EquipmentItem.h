@@ -19,6 +19,8 @@ enum class EEquipmentState : uint8
 UCLASS(ABSTRACT, Blueprintable)
 class AEquipmentItem : public AActor
 {
+	friend class AAbilityShooterCharacter;
+
 	GENERATED_BODY()
 
 protected:

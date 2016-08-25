@@ -500,7 +500,7 @@ void ABulletGunWeapon::OnAltStarted()
 		//characterOwner->GetCameraBoom()->TargetArmLength = FMath::FInterpConstantTo(characterOwner->GetCameraBoom()->TargetArmLength, characterOwner->GetCameraBoom()->TargetArmLength * weaponConfig.aimingCamScale, GetWorld()->DeltaTimeSeconds, 45.f);
 
 		//make the weapon more accurate while aiming down sights
-		weaponConfig.firingSpreadMax *= characterOwner->GetADSWeaponSpread();
+		weaponConfig.firingSpreadMax /= characterOwner->GetADSWeaponSpread();
 		weaponConfig.firingSpreadIncrement *= characterOwner->GetADSWeaponSpread();
 	}
 }
@@ -519,7 +519,7 @@ void ABulletGunWeapon::OnAltFinished()
 		characterOwner->GetCameraBoom()->SocketOffset.Y -= 50.f;
 		//characterOwner->GetCameraBoom()->TargetArmLength = FMath::FInterpConstantTo(characterOwner->GetCameraBoom()->TargetArmLength, characterOwner->GetCameraBoom()->TargetArmLength / weaponConfig.aimingCamScale, GetWorld()->DeltaTimeSeconds, 45.f);
 
-		weaponConfig.firingSpreadMax /= characterOwner->GetADSWeaponSpread();
+		weaponConfig.firingSpreadMax *= characterOwner->GetADSWeaponSpread();
 		weaponConfig.firingSpreadIncrement /= characterOwner->GetADSWeaponSpread();
 	}
 }

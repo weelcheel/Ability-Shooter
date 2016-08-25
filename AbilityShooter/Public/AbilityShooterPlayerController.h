@@ -2,6 +2,8 @@
 
 #include "AbilityShooterPlayerController.generated.h"
 
+struct FEffectInitInfo;
+
 UCLASS()
 class AAbilityShooterPlayerController : public APlayerController
 {
@@ -13,6 +15,10 @@ protected:
 	void HandleRespawnTimer();
 
 public:
+
+	/* caches the persisting effects the player has to apply to the new character on spawn */
+	TArray<FEffectInitInfo> persistentEffects;
+
 	AAbilityShooterPlayerController();
 
 	/* server function that starts the respawn timer for this player */

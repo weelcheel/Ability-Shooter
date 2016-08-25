@@ -1,7 +1,9 @@
 #include "AbilityShooter.h"
 #include "AbilityShooterCharacter.h"
 #include "AbilityShooterGameMode.h"
+#include "PlayerHUD.h"
 #include "EquipmentItem.h"
+#include "AbilityShooterPlayerController.h"
 #include "UnrealNetwork.h"
 
 //////////////////////////////////////////////////////////////////////////
@@ -398,6 +400,46 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FDamageEvent const &
 		}
 	}
 
+	//end all effects currently effecting that don't persist through death, and save the ones that do
+	AAbilityShooterPlayerController* pc = Cast<AAbilityShooterPlayerController>(GetController());
+	for (int32 i = 0; i < currentEffects.Num(); i++)
+	{
+		UEffect* effect = currentEffects[i];
+		if (!IsValid(effect))
+			continue;
+
+		if (IsValid(pc) && Role == ROLE_Authority)
+		{
+			if (effect->bPersistThruDeath)
+			{
+				FEffectInitInfo persistentInfo;
+				persistentInfo.bDoesPersistThruDeath = effect->bPersistThruDeath;
+				persistentInfo.description = effect->description;
+				persistentInfo.duration = effect->duration;
+				persistentInfo.effectType = effect->GetClass();
+				persistentInfo.statAlters = effect->statAlters;
+				persistentInfo.uiName = effect->uiName;
+				persistentInfo.persistentTimer = effect->expirationTimer;
+
+				pc->persistentEffects.Add(persistentInfo);
+			}
+		}
+
+		if (effect->bPersistThruDeath)
+			currentEffects.RemoveAt(i);
+		else
+			EndEffect(effect);
+
+		if (IsValid(pc))
+		{
+			APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
+			if (IsValid(hud))
+				hud->OnEffectsListUpdate();
+		}
+
+		i--;
+	}
+	
 	// cannot use IsLocallyControlled here, because even local client's controller may be NULL here
 	//if (GetNetMode() != NM_DedicatedServer && DeathSound && Mesh1P && Mesh1P->IsVisible())
 		//UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation());
@@ -654,10 +696,13 @@ float AAbilityShooterCharacter::GetADSWeaponSpread() const
 void AAbilityShooterCharacter::ApplyEffect_Implementation(AAbilityShooterCharacter* originChar, const FEffectInitInfo& initInfo)
 {
 	//generate key
-	FString newKey = "";
-	if (IsValid(originChar))
-		newKey += originChar->GetName() + "_";
-	newKey += initInfo.uiName.ToString() + "_" + GetName();
+	FString newKey = initInfo.persistentKey;
+	if (newKey == "")
+	{
+		if(IsValid(originChar))
+			newKey += originChar->GetName() + "_";
+		newKey += initInfo.uiName.ToString() + "_" + GetName();
+	}
 
 	//don't apply more than once
 	for (UEffect* effect : currentEffects)
@@ -667,53 +712,74 @@ void AAbilityShooterCharacter::ApplyEffect_Implementation(AAbilityShooterCharact
 	}
 
 	//create and initialize the effect
-	UEffect* newEffect = NewObject<UEffect>(this, initInfo.effectType);
+	UEffect* newEffect;
+	if (!IsValid(initInfo.effectType))
+		newEffect = NewObject<UEffect>();
+	else
+		newEffect = NewObject<UEffect>(this, initInfo.effectType);
+
 	if (!IsValid(newEffect))
 		return;
 
 	newEffect->key = newKey;
 	newEffect->Initialize(initInfo, this);
 
-	//if we're not the server, just set the expiration timer and add
-	newEffect->SetExpirationTimer();
-	if (Role < ROLE_Authority)
+	//only start the expiration timer if it hasn't been started yet
+	if (GetWorldTimerManager().GetTimerRemaining(newEffect->expirationTimer) <= 0.f)
+		newEffect->SetExpirationTimer();
+	currentEffects.AddUnique(newEffect);
+
+	//notify the player HUD that the current effects have changed
+	APlayerController* pc = Cast<APlayerController>(GetController());
+	if (IsValid(pc))
 	{
-		currentEffects.AddUnique(newEffect);
-		return;
+		APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
+		if (IsValid(hud))
+			hud->OnEffectsListUpdate();
 	}
+
+	//if we're not the server, just set the expiration timer and add
+	if (Role < ROLE_Authority)
+		return;
 
 	//blueprint on application event
 	newEffect->OnEffectAppliedToCharacter(this);
-
-	//finally add the effect
-	currentEffects.AddUnique(newEffect);
 }
 
 void AAbilityShooterCharacter::EndEffect(UEffect* endingEffect)
 {
-	if (!IsValid(endingEffect) || Role < ROLE_Authority)
+	if (!IsValid(endingEffect))
 		return;
 
 	//clear the effects timer
 	GetWorldTimerManager().ClearTimer(endingEffect->expirationTimer);
 
 	//let the effect do any blueprint operations
-	endingEffect->OnEffectRemovedFromCharacter(this);
+	if (Role == ROLE_Authority)
+		endingEffect->OnEffectRemovedFromCharacter(this);
 
 	//remove the effect from our arrays
 	currentEffects.Remove(endingEffect);
-	ClientEndEffect(endingEffect->GetKey());
+
+	//notify the player HUD that the current effects have changed
+	if (IsLocallyControlled())
+	{
+		APlayerController* pc = Cast<APlayerController>(GetController());
+		if (IsValid(pc))
+		{
+			APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
+			if (IsValid(hud))
+				hud->OnEffectsListUpdate();
+		}
+	}
 }
 
-void AAbilityShooterCharacter::ClientEndEffect_Implementation(const FString& key)
+void AAbilityShooterCharacter::ForceEndEffect_Implementation(const FString& key)
 {
-	for (int32 i = 0; i < currentEffects.Num(); i++)
+	for (UEffect* effect : currentEffects)
 	{
-		if (currentEffects[i]->GetKey() == key)
-		{
-			GetWorldTimerManager().ClearTimer(currentEffects[i]->expirationTimer);
-			currentEffects.RemoveAt(i);
-		}
+		if (effect->key == key)
+			EndEffect(effect);
 	}
 }
 

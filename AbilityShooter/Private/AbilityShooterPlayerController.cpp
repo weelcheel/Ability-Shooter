@@ -2,6 +2,8 @@
 #include "AbilityShooterPlayerController.h"
 #include "ASPlayerState.h"
 #include "AbilityShooterGameMode.h"
+#include "AbilityShooterCharacter.h"
+#include "Effect.h"
 
 AAbilityShooterPlayerController::AAbilityShooterPlayerController()
 {
@@ -30,6 +32,20 @@ void AAbilityShooterPlayerController::HandleRespawnTimer()
 	{
 		AAbilityShooterGameMode* gm = GetWorld()->GetAuthGameMode<AAbilityShooterGameMode>();
 		if (IsValid(gm))
+		{
 			gm->RestartPlayer(this);
+			
+			AAbilityShooterCharacter* ownedCharacter = Cast<AAbilityShooterCharacter>(GetCharacter());
+			if (IsValid(ownedCharacter))
+			{
+				for (int32 i = 0; i < persistentEffects.Num(); i++)
+				{
+					if ((persistentEffects[i].duration > 0.f && GetWorldTimerManager().GetTimerRemaining(persistentEffects[i].persistentTimer) > 0.f) || persistentEffects[i].duration <= 0.f)
+						ownedCharacter->ApplyEffect(nullptr, persistentEffects[i]);
+				}
+
+				persistentEffects.Empty();
+			}
+		}
 	}
 }

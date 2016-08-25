@@ -8,6 +8,7 @@ UEffect::UEffect()
 	description = NSLOCTEXT("AbilityShooter", "effectUninit", "Uninitialized");
 	duration = -1.f;
 	bEffectInitialized = false;
+	bPersistThruDeath = false;
 	key = "";
 }
 
@@ -48,6 +49,8 @@ void UEffect::Initialize(const FEffectInitInfo& initInfo, AAbilityShooterCharact
 	duration = initInfo.duration;
 	appliedCharacter = characterOwner;
 	statAlters = initInfo.statAlters;
+	bPersistThruDeath = initInfo.bDoesPersistThruDeath;
+	expirationTimer = initInfo.persistentTimer;
 	
 	bEffectInitialized = true;
 }

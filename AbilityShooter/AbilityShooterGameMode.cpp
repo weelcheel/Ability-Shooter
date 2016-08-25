@@ -5,6 +5,7 @@
 #include "AbilityShooterCharacter.h"
 #include "AbilityShooterPlayerController.h"
 #include "ASPlayerState.h"
+#include "PlayerHUD.h"
 
 AAbilityShooterGameMode::AAbilityShooterGameMode()
 {
@@ -17,6 +18,7 @@ AAbilityShooterGameMode::AAbilityShooterGameMode()
 
 	PlayerControllerClass = AAbilityShooterPlayerController::StaticClass();
 	PlayerStateClass = AASPlayerState::StaticClass();
+	HUDClass = APlayerHUD::StaticClass();
 
 	basePlayerRespawnTime = 10.f;
 }

@@ -269,9 +269,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Effect)
 	void EndEffect(UEffect* endingEffect);
 
-	/* [CLIENT] ends an effect on clients */
-	UFUNCTION(reliable, client)
-	void ClientEndEffect(const FString& key);
+	/* force end an effect (useful for ending effects that aren't expired yet) */
+	UFUNCTION(reliable, NetMulticast)
+	void ForceEndEffect(const FString& key);
 
 	/* gets the current value (modified by effects) for a stat */
 	UFUNCTION(BlueprintCallable, Category = Effect)

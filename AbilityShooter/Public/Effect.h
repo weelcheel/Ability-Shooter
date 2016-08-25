@@ -26,7 +26,7 @@ struct FEffectStatAlter
 	float deltaStat;
 };
 
-UCLASS(abstract)
+UCLASS(Blueprintable)
 class UEffect : public UObject
 {
 	friend class AAbilityShooterCharacter;
@@ -50,6 +50,9 @@ protected:
 	/* get the total time before this effect expires; does not change from initial set unless the effect is reset to a different length */
 	UPROPERTY()
 	float duration;
+
+	/* whether or not this effect persists through death */
+	bool bPersistThruDeath;
 
 	/* stats this effect alters */
 	TArray<FEffectStatAlter> statAlters;
@@ -134,20 +137,27 @@ struct FEffectInitInfo
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = EffectInfo)
 	TArray<FEffectStatAlter> statAlters;
 
-	/* whether or not this effect can be inflicted multiple times concurrently */
+	/* whether or not this effect keeps going thru death */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = EffectInfo)
-	bool bCanConcurrentlyInflict;
+	bool bDoesPersistThruDeath;
 
 	/* what class of effect to apply */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = EffectInfo)
 	TSubclassOf<UEffect> effectType;
 
+	/* timer handle for if this effect is persisting through death */
+	FTimerHandle persistentTimer;
+
+	/* key for if this effect is persisting through death */
+	FString persistentKey;
+
 	FEffectInitInfo()
 	{
 		uiName = FText::GetEmpty();
 		description = FText::GetEmpty();
+		persistentKey = "";
 		duration = -1.f;
-		bCanConcurrentlyInflict = false;
+		bDoesPersistThruDeath = false;
 		effectType = UEffect::StaticClass();
 	}
 };

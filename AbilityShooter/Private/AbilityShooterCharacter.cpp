@@ -4,6 +4,7 @@
 #include "PlayerHUD.h"
 #include "EquipmentItem.h"
 #include "AbilityShooterPlayerController.h"
+#include "Ability.h"
 #include "UnrealNetwork.h"
 
 //////////////////////////////////////////////////////////////////////////
@@ -54,6 +55,7 @@ AAbilityShooterCharacter::AAbilityShooterCharacter()
 	// are set in the derived blueprint asset named MyCharacter (to avoid direct content references in C++)
 	
 	health = 100.f;
+	maxAbilityCount = 3;
 }
 
 void AAbilityShooterCharacter::PostInitializeComponents()
@@ -93,6 +95,34 @@ void AAbilityShooterCharacter::PawnClientRestart()
 	SetCurrentEquipment(currentEquipment);
 
 	//@TODO: set mesh team color material instance
+}
+
+void AAbilityShooterCharacter::AddAbility(TSubclassOf<AAbility> newType)
+{
+	//only run on server with a valid class
+	if (Role < ROLE_Authority || !IsValid(newType))
+		return;
+
+	//don't add if we don't have enough room
+	if (abilities.Num() + 1 > maxAbilityCount)
+		return;
+
+	//don't add if the Shooter already has an ultimate
+	if (newType->GetDefaultObject<AAbility>()->bUltimateAbility)
+	{
+		for (AAbility* ability : abilities)
+		{
+			if (ability->bUltimateAbility)
+				return;
+		}
+	}
+
+	AAbility* newAbility = GetWorld()->SpawnActor<AAbility>(newType, GetActorLocation(), GetActorRotation());
+	if (IsValid(newAbility))
+	{
+		newAbility->SetupAbility(this);
+		abilities.AddUnique(newAbility);
+	}
 }
 
 void AAbilityShooterCharacter::PossessedBy(class AController* C)
@@ -580,10 +610,14 @@ void AAbilityShooterCharacter::AlternateUseStop()
 
 void AAbilityShooterCharacter::OnStartAbility(int32 abilityIndex)
 {
+	if (abilityIndex >= 0 && abilityIndex < abilities.Num() && IsValid(abilities[abilityIndex]))
+		abilities[abilityIndex]->StartPerform();
 }
 
 void AAbilityShooterCharacter::OnStopAbility(int32 abilityIndex)
 {
+	if (abilityIndex >= 0 && abilityIndex < abilities.Num() && IsValid(abilities[abilityIndex]))
+		abilities[abilityIndex]->StopPerform();
 }
 
 void AAbilityShooterCharacter::TurnAtRate(float Rate)

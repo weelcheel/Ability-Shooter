@@ -49,6 +49,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = Ability)
 	bool bAutoPerform;
 
+	/* whether or not this Ability is an Ultimate Ability */
+	UPROPERTY(EditDefaultsOnly, Category = Ability)
+	bool bUltimateAbility;
+
 	/** is Ability use active? */
 	uint32 bWantsToPerform : 1;
 

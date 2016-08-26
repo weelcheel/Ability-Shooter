@@ -6,6 +6,7 @@
 #include "AbilityShooterCharacter.generated.h"
 
 class AEquipmentItem;
+class AAbility;
 
 /* types for hard Crowd Control (Ailments) */
 UENUM(BlueprintType)
@@ -93,20 +94,28 @@ protected:
 	UPROPERTY(Transient, Replicated)
 	TArray<AEquipmentItem*> equipmentInventory;
 
-	/** Replicate where this pawn was last hit and damaged */
-	UPROPERTY(Transient, ReplicatedUsing = OnRep_LastTakeHitInfo)
-	struct FTakeHitInfo LastTakeHitInfo;
+	/** currently equipped equipment */
+	UPROPERTY(Transient, ReplicatedUsing = OnRep_CurrentEquipment)
+	AEquipmentItem* currentEquipment;
+
+	/** current abilities in inventory */
+	UPROPERTY(Transient, Replicated)
+	TArray<AAbility*> abilities;
+
+	/* max number of abilities this Shooter can have */
+	UPROPERTY(BlueprintReadWrite, Category = Abilities)
+	int32 maxAbilityCount;
 
 	/** Time at which point the last take hit info for the actor times out and won't be replicated; Used to stop join-in-progress effects all over the screen */
 	float LastTakeHitTimeTimeout;
 
+	/** Replicate where this pawn was last hit and damaged */
+	UPROPERTY(Transient, ReplicatedUsing = OnRep_LastTakeHitInfo)
+	struct FTakeHitInfo LastTakeHitInfo;
+
 	/** socket or bone name for attaching weapon mesh */
 	UPROPERTY(EditDefaultsOnly, Category = Inventory)
 	FName equipmentAttachPoint;
-
-	/** currently equipped equipment */
-	UPROPERTY(Transient, ReplicatedUsing = OnRep_CurrentEquipment)
-	AEquipmentItem* currentEquipment;
 
 	/** effect played on respawn */
 	UPROPERTY(EditDefaultsOnly, Category = Character)
@@ -359,5 +368,9 @@ public:
 
 	/* whether or not this Shooter can perform Abilities */
 	bool CanPerformAbilities() const;
+
+	/* [server] adds a type of ability to this character's inventory */
+	UFUNCTION(BlueprintCallable, Category = Abilities)
+	void AddAbility(TSubclassOf<AAbility> newType);
 };
 

@@ -8,6 +8,7 @@ AAbility::AAbility()
 	//initialize the cooldown values
 	currentState = EAbilityState::NoOwner;
 	bAutoPerform = true;
+	bUltimateAbility = false;
 
 	bWantsToPerform = false;
 	

@@ -111,3 +111,28 @@ public:
 		EnsureReplicationByte++;
 	}
 };
+
+USTRUCT()
+struct FDecalData
+{
+	GENERATED_USTRUCT_BODY()
+
+		/** material */
+		UPROPERTY(EditDefaultsOnly, Category = Decal)
+		UMaterial* material;
+
+	/** quad size (width & height) */
+	UPROPERTY(EditDefaultsOnly, Category = Decal)
+		float size;
+
+	/** lifespan */
+	UPROPERTY(EditDefaultsOnly, Category = Decal)
+		float lifespan;
+
+	/** defaults */
+	FDecalData()
+		: size(256.f)
+		, lifespan(10.f)
+	{
+	}
+};

@@ -244,6 +244,7 @@ void AEquipmentItem::HandleUsing()
 		if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
 		{
 			UseEquipment();
+			OnUse();
 
 			burstCounter++;
 		}
@@ -323,6 +324,8 @@ void AEquipmentItem::OnBurstFinished()
 
 	GetWorldTimerManager().ClearTimer(handleFiringTimer);
 	bReusing = false;
+
+	OnUseEnded();
 }
 
 void AEquipmentItem::OnAltStarted()

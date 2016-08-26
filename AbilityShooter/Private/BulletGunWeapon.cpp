@@ -129,6 +129,8 @@ void ABulletGunWeapon::UseAmmo()
 
 void ABulletGunWeapon::UseEquipment()
 {
+	Super::UseEquipment();
+
 	FireWeapon();
 }
 

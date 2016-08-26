@@ -227,7 +227,7 @@ protected:
 	float GetEquipDuration() const;
 
 	//////////////////////////////////////////////////////////////////////////
-	// Weapon usage helpers
+	// Equipment usage helpers
 
 	/** play weapon sounds */
 	UAudioComponent* PlayEquipmentSound(USoundCue* sound);
@@ -249,6 +249,17 @@ protected:
 
 	/** find hit */
 	FHitResult EquipmentTrace(const FVector& TraceFrom, const FVector& TraceTo) const;
+
+	//////////////////////////////////////////////////////////////////////////
+	// Blueprint hooks
+
+	/* called whenever OnBurstStarted to allow for blueprint enabled on start use logic */
+	UFUNCTION(BlueprintImplementableEvent, Category = Equipment)
+	void OnUse();
+
+	/* called whenever OnBurstStarted to allow for blueprint enabled on stop use logic */
+	UFUNCTION(BlueprintImplementableEvent, Category = Equipment)
+	void OnUseEnded();
 
 public:
 	AEquipmentItem();

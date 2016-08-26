@@ -595,7 +595,7 @@ void AAbilityShooterCharacter::LookUpAtRate(float Rate)
 
 void AAbilityShooterCharacter::MoveForward(float Value)
 {
-	if ((Controller != NULL) && (Value != 0.0f))
+	if ((Controller != NULL) && (Value != 0.0f) && currentAilment.type != EAilment::AL_Stun)
 	{
 		// find out which way is forward
 		const FRotator Rotation = Controller->GetControlRotation();
@@ -609,7 +609,7 @@ void AAbilityShooterCharacter::MoveForward(float Value)
 
 void AAbilityShooterCharacter::MoveRight(float Value)
 {
-	if ( (Controller != NULL) && (Value != 0.0f) )
+	if ( (Controller != NULL) && (Value != 0.0f) && currentAilment.type != EAilment::AL_Stun)
 	{
 		// find out which way is right
 		const FRotator Rotation = Controller->GetControlRotation();
@@ -823,6 +823,9 @@ void AAbilityShooterCharacter::ApplyAilment(const FAilmentInfo& info)
 	case EAilment::AL_Knockup: //a knockup is a stun that displaces the character a certain distance.
 		GetCapsuleComponent()->AddImpulse(currentAilment.dir);
 		break;
+	case EAilment::AL_Stun:
+		GetCharacterMovement()->DisableMovement();
+		break;
 	}
 
 	if (currentAilment.duration > 0.f)
@@ -845,6 +848,8 @@ void AAbilityShooterCharacter::EndCurrentAilment()
 
 		ApplyAilment(nextAilment);
 	}
+	else
+		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 }
 
 //////////////////////////////////////////////////////////////////////////

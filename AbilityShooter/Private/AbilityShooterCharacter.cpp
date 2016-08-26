@@ -354,6 +354,11 @@ bool AAbilityShooterCharacter::CanDie() const
 	return true;
 }
 
+bool AAbilityShooterCharacter::CanPerformAbilities() const
+{
+	return currentAilment.type != EAilment::AL_Knockup && currentAilment.type != EAilment::AL_Stun;
+}
+
 bool AAbilityShooterCharacter::Die(float KillingDamage, struct FDamageEvent const& DamageEvent, class AController* Killer, class AActor* DamageCauser)
 {
 	if (!CanDie())

@@ -356,5 +356,8 @@ public:
 	/* called to get the current Ailment status of this character */
 	UFUNCTION(BlueprintCallable, Category = CC)
 	FAilmentInfo GetCurrentAilment() const;
+
+	/* whether or not this Shooter can perform Abilities */
+	bool CanPerformAbilities() const;
 };
 

@@ -111,6 +111,14 @@ protected:
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_BurstCounter)
 	int32 burstCounter;
 
+	/* what veteran level this equipment is */
+	UPROPERTY(replicated, BlueprintReadOnly, Category = Skill)
+	int32 veteranLevel;
+
+	/* max veteran level this equipment can have */
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = Skill)
+	int32 maxVeteranLevel;
+
 	/** handle for efficient management of OnEquipFinished timer */
 	FTimerHandle onEquipFinishedTimer;
 

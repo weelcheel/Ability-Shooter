@@ -7,6 +7,59 @@
 
 class AEquipmentItem;
 
+/* types for hard Crowd Control (Ailments) */
+UENUM(BlueprintType)
+enum class EAilment : uint8
+{
+	AL_None UMETA(DisplayName = "No Ailment"),
+	AL_Knockup UMETA(DisplayName = "Knocked Up"),
+	AL_Stun UMETA(DisplayName = "Stunned"),
+	AL_Neutral UMETA(DisplayName = "Neutralized"),
+	AL_Blind UMETA(DisplayName = "Blinded"),
+	AL_Snare UMETA(DisplayName = "Snared"),
+	AL_Max UMETA(Hidden)
+};
+
+/* struct for holding all of the data that an ailment needs */
+USTRUCT(BlueprintType)
+struct FAilmentInfo
+{
+	GENERATED_USTRUCT_BODY()
+
+	/* type of ailment this is */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ailment)
+	EAilment type;
+
+	/* text to represent the ailment */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ailment)
+	FText text;
+
+	/* duration this ailment normally lasts for */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ailment)
+	float duration;
+
+	/* any directional and magnitude info associated with the ailment */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ailment)
+	FVector dir;
+
+	/* HUD icon associated with this CC */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ailment)
+	UTexture* icon;
+
+	/* particle system associated with this CC */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ailment)
+	UParticleSystem* fx;
+
+	FAilmentInfo()
+	{
+		type = EAilment::AL_None;
+		text = FText::GetEmpty();
+		duration = -1.f;
+		icon = nullptr;
+		fx = nullptr;
+	}
+};
+
 UCLASS(config=Game)
 class AAbilityShooterCharacter : public ACharacter
 {
@@ -66,6 +119,17 @@ protected:
 	/* array of effects currently afflicting this character */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Effects)
 	TArray<UEffect*> currentEffects;
+
+	/* current ailment (if any) affecting this Shooter */
+	UPROPERTY(ReplicatedUsing = OnRep_Ailment)
+	FAilmentInfo currentAilment;
+
+	/* array of ailments that need to be inflicted to the character (if there is an ailment currently being processed) */
+	TQueue<FAilmentInfo> ailmentQueue;
+
+	/* timer for handling aimlments */
+	UPROPERTY(BlueprintReadOnly, Category = Ailment)
+	FTimerHandle ailmentTimer;
 
 	/** spawn inventory, setup initial variables */
 	virtual void PostInitializeComponents() override;
@@ -183,6 +247,10 @@ protected:
 	UFUNCTION()
 	void OnRep_CurrentEquipment(AEquipmentItem* lastEquipment);
 
+	/* notify the client of Ailment */
+	UFUNCTION()
+	void OnRep_Ailment();
+
 	/** Called on the actor right before replication occurs */
 	virtual void PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker) override;
 
@@ -276,5 +344,17 @@ public:
 	/* gets the current value (modified by effects) for a stat */
 	UFUNCTION(BlueprintCallable, Category = Effect)
 	float GetCurrentStat(EStat stat) const;
+
+	/* called whenever something tries to give this character an Ailment */
+	UFUNCTION(BlueprintCallable, Category = CC)
+	void ApplyAilment(UPARAM(ref) const FAilmentInfo& info);
+
+	/* called whenever something tries to end this character's current Ailment */
+	UFUNCTION(BlueprintCallable, Category = CC)
+	void EndCurrentAilment();
+
+	/* called to get the current Ailment status of this character */
+	UFUNCTION(BlueprintCallable, Category = CC)
+	FAilmentInfo GetCurrentAilment() const;
 };
 

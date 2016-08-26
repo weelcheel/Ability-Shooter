@@ -796,6 +796,57 @@ float AAbilityShooterCharacter::GetCurrentStat(EStat stat) const
 	return 0.f;
 }
 
+void AAbilityShooterCharacter::OnRep_Ailment()
+{
+	if (currentAilment.duration > 0.f)
+		GetWorldTimerManager().SetTimer(ailmentTimer, currentAilment.duration, false);
+	else
+		GetWorldTimerManager().ClearTimer(ailmentTimer);
+}
+
+void AAbilityShooterCharacter::ApplyAilment(const FAilmentInfo& info)
+{
+	//only run on the server
+	if (Role < ROLE_Authority)
+		return;
+
+	if (currentAilment.type != EAilment::AL_None)
+	{
+		ailmentQueue.Enqueue(info);
+		return;
+	}
+
+	currentAilment = info;
+
+	switch (currentAilment.type)
+	{
+	case EAilment::AL_Knockup: //a knockup is a stun that displaces the character a certain distance.
+		GetCapsuleComponent()->AddImpulse(currentAilment.dir);
+		break;
+	}
+
+	if (currentAilment.duration > 0.f)
+		GetWorldTimerManager().SetTimer(ailmentTimer, this, &AAbilityShooterCharacter::EndCurrentAilment, currentAilment.duration);
+}
+
+FAilmentInfo AAbilityShooterCharacter::GetCurrentAilment() const
+{
+	return currentAilment;
+}
+
+void AAbilityShooterCharacter::EndCurrentAilment()
+{
+	GetWorldTimerManager().ClearTimer(ailmentTimer);
+
+	if (!ailmentQueue.IsEmpty())
+	{
+		FAilmentInfo nextAilment;
+		ailmentQueue.Dequeue(nextAilment);
+
+		ApplyAilment(nextAilment);
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////
 // Replication
 
@@ -823,4 +874,5 @@ void AAbilityShooterCharacter::GetLifetimeReplicatedProps(TArray< FLifetimePrope
 	// everyone
 	DOREPLIFETIME(AAbilityShooterCharacter, currentEquipment);
 	DOREPLIFETIME(AAbilityShooterCharacter, health);
+	DOREPLIFETIME(AAbilityShooterCharacter, currentAilment);
 }

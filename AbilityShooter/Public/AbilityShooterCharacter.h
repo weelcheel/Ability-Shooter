@@ -3,6 +3,7 @@
 #include "AbilityShooterTypes.h"
 #include "Sound/SoundCue.h"
 #include "Effect.h"
+#include "CharacterAction.h"
 #include "AbilityShooterCharacter.generated.h"
 
 class AEquipmentItem;
@@ -58,6 +59,35 @@ struct FAilmentInfo
 		duration = -1.f;
 		icon = nullptr;
 		fx = nullptr;
+	}
+};
+
+/* struct for holding all of the data that a character action needs */
+USTRUCT(BlueprintType)
+struct FCharacterActionInfo
+{
+	GENERATED_USTRUCT_BODY()
+
+	/* text to represent the action */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = CharacterAction)
+	FText title;
+
+	/* how long the action lasts overall */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = CharacterAction)
+	float duration;
+
+	/* timer to track the actions time left */
+	UPROPERTY(BlueprintReadWrite, Category = CharacterAction)
+	FTimerHandle timer;
+
+	/* latent action we can use to prematurely return on if we need to */
+	FCharacterAction* latentAction;
+
+	FCharacterActionInfo()
+	{
+		title = FText::GetEmpty();
+		duration = -1.f;
+		latentAction = nullptr;
 	}
 };
 
@@ -139,6 +169,10 @@ protected:
 	/* timer for handling aimlments */
 	UPROPERTY(BlueprintReadOnly, Category = Ailment)
 	FTimerHandle ailmentTimer;
+
+	/* current action (if any) this character is performing */
+	UPROPERTY(BlueprintReadOnly, Category = CharacterAction)
+	FCharacterActionInfo currentAction;
 
 	/** spawn inventory, setup initial variables */
 	virtual void PostInitializeComponents() override;
@@ -376,5 +410,20 @@ public:
 	/* whether or not this character is an enemy for a controller */
 	UFUNCTION(BlueprintCallable, Category = Enemy)
 	bool IsEnemyFor(AController* testPC) const;
+
+	/* whether or not this character needs to enter an Ability's 'Aiming' state or can go directly to performing (gets if the player controller has bUseQuickAimForAbilities) */
+	UFUNCTION(BlueprintCallable, Category = Abilities)
+	bool ShouldQuickAimAbilities() const;
+
+	/* latent blueprint function that sets the current character action and doesn't return until the action is */
+	UFUNCTION(BlueprintCallable, Category = CharacterAction, meta = (Latent, LatentInfo = "latentInfo"))
+	void ApplyLatentAction(FCharacterActionInfo actionInfo, FLatentActionInfo latentInfo);
+
+	/* net multicast functio to broadcast to all clients about an action */
+	UFUNCTION(reliable, NetMulticast)
+	void AllApplyAction(const FCharacterActionInfo& newAction);
+
+	/* forcibly end the current action */
+	void ForceEndCurrentAction();
 };
 

@@ -484,10 +484,8 @@ void ABulletGunWeapon::ServerHandleUsing_Implementation()
 	}
 }
 
-void ABulletGunWeapon::OnAltStarted()
+void ABulletGunWeapon::UseAltStarted()
 {
-	Super::OnAltStarted();
-
 	if (IsValid(characterOwner))
 	{
 		//zoom the camera in and make the character aim at the view rotation
@@ -506,10 +504,8 @@ void ABulletGunWeapon::OnAltStarted()
 	}
 }
 
-void ABulletGunWeapon::OnAltFinished()
+void ABulletGunWeapon::UseAltStopped()
 {
-	Super::OnAltFinished();
-
 	if (IsValid(characterOwner))
 	{
 		characterOwner->GetFollowCamera()->bUsePawnControlRotation = false;

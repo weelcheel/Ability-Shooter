@@ -268,8 +268,8 @@ protected:
 	/** [local + server] handle weapon firing */
 	virtual void HandleUsing();
 
-	virtual void OnAltStarted() override;
-	virtual void OnAltFinished() override;
+	virtual void UseAltStarted();
+	virtual void UseAltStopped();
 
 	//////////////////////////////////////////////////////////////////////////
 	// Replication & effects

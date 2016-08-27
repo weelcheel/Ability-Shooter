@@ -84,9 +84,12 @@ protected:
 	/** is equip animation playing? */
 	uint32 bPendingEquip : 1;
 
-	/* are we currently using alt? */
+	/* are we currently wanting to use alt? */
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_AltToggle)
 	uint32 bWantsToAlt : 1;
+
+	/* is the alt actually currently active? */
+	uint32 bIsAltActive : 1;
 
 	/** weapon is reusing*/
 	uint32 bReusing;
@@ -186,6 +189,12 @@ protected:
 
 	/** [local + server] alt finished */
 	virtual void OnAltFinished();
+
+	/* actually performs the alt */
+	virtual void UseAltStarted() PURE_VIRTUAL(AEquipmentItem::UseAltStarted, );
+
+	/* actually performs the alt */
+	virtual void UseAltStopped() PURE_VIRTUAL(AEquipmentItem::UseAltStopped, );
 
 	/** update equipment state */
 	void SetEquipmentState(EEquipmentState newState);
@@ -308,4 +317,8 @@ public:
 
 	/** [local + server] stop equipment use */
 	virtual void StopAlt();
+
+	/* whether or not this equipment's alt is active */
+	UFUNCTION(BlueprintCallable, Category = Alt)
+	bool IsAltActive() const;
 };

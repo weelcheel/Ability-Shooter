@@ -407,7 +407,14 @@ bool AAbilityShooterCharacter::CanDie() const
 
 bool AAbilityShooterCharacter::CanPerformAbilities() const
 {
-	return currentAilment.type != EAilment::AL_Knockup && currentAilment.type != EAilment::AL_Stun;
+	bool bIsAimingAnAbility = false;
+	for (AAbility* ability : abilities)
+	{
+		if (ability->GetCurrentState() == EAbilityState::Aiming)
+			bIsAimingAnAbility = true;
+	}
+
+	return !bIsAimingAnAbility && currentAilment.type != EAilment::AL_Knockup && currentAilment.type != EAilment::AL_Stun && GetWorldTimerManager().GetTimerRemaining(currentAction.timer) <= 0.f;
 }
 
 bool AAbilityShooterCharacter::Die(float KillingDamage, struct FDamageEvent const& DamageEvent, class AController* Killer, class AActor* DamageCauser)
@@ -591,6 +598,16 @@ void AAbilityShooterCharacter::TouchStopped(ETouchIndex::Type FingerIndex, FVect
 
 void AAbilityShooterCharacter::PrimaryUseStart()
 {
+	//check for confirming aim in abilities first
+	for (AAbility* ability : abilities)
+	{
+		if (ability->GetCurrentState() == EAbilityState::Aiming)
+		{
+			ability->ConfirmAim();
+			return;
+		}
+	}
+
 	if (!bWantsToUse)
 	{
 		bWantsToUse = true;
@@ -689,7 +706,7 @@ FName AAbilityShooterCharacter::GetEquipmentAttachPoint() const
 
 bool AAbilityShooterCharacter::CanUseEquipment() const
 {
-	return IsAlive();
+	return IsAlive() && GetWorldTimerManager().GetTimerRemaining(currentAction.timer) <= 0.f && currentAilment.type != EAilment::AL_Stun;
 }
 
 bool AAbilityShooterCharacter::IsAlive() const
@@ -913,6 +930,46 @@ void AAbilityShooterCharacter::EndCurrentAilment()
 	}
 
 	ApplyAilment(nextAilment);
+}
+
+bool AAbilityShooterCharacter::ShouldQuickAimAbilities() const
+{
+	//@DEBUG: testing right now, eventually read a setting from the player
+	return false;
+}
+
+void AAbilityShooterCharacter::ApplyLatentAction(FCharacterActionInfo actionInfo, FLatentActionInfo latentInfo)
+{
+	if (GetWorld() && GetWorldTimerManager().GetTimerRemaining(currentAction.timer) <= 0.f)
+	{
+		FLatentActionManager& actionManager = GetWorld()->GetLatentActionManager();
+		if (actionManager.FindExistingAction<FCharacterAction>(latentInfo.CallbackTarget, latentInfo.UUID) == nullptr)
+		{
+			FCharacterAction* newAction = new FCharacterAction(actionInfo.duration, latentInfo);
+			actionManager.AddNewAction(latentInfo.CallbackTarget, latentInfo.UUID, newAction);
+			actionInfo.latentAction = newAction;
+			AllApplyAction(actionInfo);
+		}
+	}
+}
+
+void AAbilityShooterCharacter::AllApplyAction_Implementation(const FCharacterActionInfo& newAction)
+{
+	currentAction = newAction;
+
+	GetWorldTimerManager().SetTimer(currentAction.timer, currentAction.duration, false);
+}
+
+void AAbilityShooterCharacter::ForceEndCurrentAction()
+{
+	if (GetWorldTimerManager().GetTimerRemaining(currentAction.timer) > 0.f)
+	{
+		GetWorldTimerManager().ClearTimer(currentAction.timer);
+		if (currentAction.latentAction != nullptr)
+			currentAction.latentAction->bShouldEndPrematurely = true;
+
+		currentAction = FCharacterActionInfo();
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////

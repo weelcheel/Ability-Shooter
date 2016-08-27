@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AbilityShooterCharacter.h"
 #include "Ability.generated.h"
 
 UENUM()
@@ -9,6 +10,7 @@ enum class EAbilityState : uint8
 	Idle,
 	Disabled,
 	OnCooldown,
+	Aiming,
 	Performing,
 	MAX
 };
@@ -53,11 +55,26 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = Ability)
 	bool bUltimateAbility;
 
+	/* whether or not this Ability has an aiming state available */
+	UPROPERTY(EditDefaultsOnly, Category = Ability)
+	bool bHasAimingState;
+
+	/* replicated boolean to give performing effects */
+	UPROPERTY(Transient, ReplicatedUsing = OnRep_IsPerforming)
+	bool bIsPerforming;
+
+	/* replicated boolean to give aiming effects */
+	UPROPERTY(Transient, ReplicatedUsing = OnRep_IsAiming)
+	bool bIsAiming;
+
 	/** is Ability use active? */
 	uint32 bWantsToPerform : 1;
 
 	/** Ability wants to enter cooldown? */
 	uint32 bWantsToCooldown : 1;
+
+	/** Ability wants to confirm aiming? */
+	uint32 bWantsToConfirmAim : 1;
 
 	/* array of cooldowns for each veteran level available */
 	UPROPERTY(EditDefaultsOnly, Category = Ability)
@@ -71,9 +88,25 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = Ability)
 	FText description;
 
+	/* amount of time (if any) this Ability takes as a Character Action before performing */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = Ability)
+	FCharacterActionInfo executionTimeInfo;
+	
+	/* timer for execution */
+	FTimerHandle executionTimer;
+
 	/* blueprint hooks for unique logic */
 	UFUNCTION(BlueprintImplementableEvent, Category = Ability)
 	void Perform();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = Ability)
+	void OnAbilityStopped();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = Ability)
+	void OnAimingStarted();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = Ability)
+	void OnAimingStopped();
 
 	UFUNCTION(BlueprintImplementableEvent, Category = Ability)
 	void StartPerformEffects();
@@ -92,6 +125,10 @@ protected:
 	/* server handle perform */
 	UFUNCTION(reliable, server, WithValidation)
 	void ServerHandlePerform();
+
+	/* server confirm aim */
+	UFUNCTION(reliable, server, WithValidation)
+	void ServerConfirmAim();
 
 	/* called to get whether or not this ability can be performed */
 	bool CanPerform() const;
@@ -131,8 +168,18 @@ protected:
 	UFUNCTION(reliable, server, WithValidation)
 	void ServerLaunchProjectile(const FVector& origin, const FVector& launchDir, TSubclassOf<AProjectile> projectileType);
 
+	/* server start execution timer */
+	UFUNCTION(reliable, server, WithValidation, BlueprintCallable, Category = CharacterAction)
+	void ServerStartExecutionTimer();
+
 	UFUNCTION()
 	void OnRep_CharacterOwner();
+
+	UFUNCTION()
+	void OnRep_IsPerforming();
+
+	UFUNCTION()
+	void OnRep_IsAiming();
 
 public:
 	AAbility();
@@ -142,6 +189,9 @@ public:
 
 	/* called locally whenever this Ability is stopped performing (the Ability button is let go) */
 	void StopPerform();
+
+	/* called locally to confirm the aim of this Ability (the player pressed the Primary button while aiming this ability) */
+	void ConfirmAim();
 
 	/* called to setup the ability to a purchasing owner */
 	void SetupAbility(AAbilityShooterCharacter* newOwner);

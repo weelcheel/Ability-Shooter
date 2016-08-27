@@ -24,6 +24,7 @@ AEquipmentItem::AEquipmentItem()
 	bPendingEquip = false;
 	currentState = EEquipmentState::Idle;
 	bWantsToAlt = false;
+	bIsAltActive = false;
 
 	burstCounter = 0;
 	lastUseTime = 0.0f;
@@ -170,7 +171,8 @@ void AEquipmentItem::StartAlt()
 	if (!bWantsToAlt)
 	{
 		bWantsToAlt = true;
-		OnAltStarted();
+		if (!bIsAltActive)
+			OnAltStarted();
 	}
 }
 
@@ -182,7 +184,8 @@ void AEquipmentItem::StopAlt()
 	if (bWantsToAlt)
 	{
 		bWantsToAlt = false;
-		OnAltFinished();
+		if (bIsAltActive)
+			OnAltFinished();
 	}
 }
 
@@ -338,14 +341,24 @@ void AEquipmentItem::OnBurstFinished()
 
 void AEquipmentItem::OnAltStarted()
 {
-	if (IsValid(characterOwner))
-		characterOwner->bWantsToUseAlt = true;
+	/*if (IsValid(characterOwner))
+		characterOwner->bWantsToUseAlt = true;*/
+	if (IsValid(characterOwner) && !characterOwner->CanUseEquipment())
+		return;
+
+	bIsAltActive = true;
+
+	UseAltStarted();
 }
 
 void AEquipmentItem::OnAltFinished()
 {
-	if (IsValid(characterOwner))
-		characterOwner->bWantsToUseAlt = false;
+	/*if (IsValid(characterOwner))
+		characterOwner->bWantsToUseAlt = false;*/
+
+	bIsAltActive = false;
+
+	UseAltStopped();
 }
 
 UAudioComponent* AEquipmentItem::PlayEquipmentSound(USoundCue* sound)
@@ -562,4 +575,9 @@ float AEquipmentItem::GetEquipDuration() const
 USkeletalMeshComponent* AEquipmentItem::GetEquipmentMesh() const
 {
 	return mesh;
+}
+
+bool AEquipmentItem::IsAltActive() const
+{
+	return bIsAltActive;
 }

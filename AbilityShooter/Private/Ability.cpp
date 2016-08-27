@@ -1,8 +1,8 @@
 #include "AbilityShooter.h"
 #include "Ability.h"
-#include "AbilityShooterCharacter.h"
 #include "Projectile.h"
 #include "DrawDebugHelpers.h"
+#include "EquipmentItem.h"
 #include "UnrealNetwork.h"
 
 AAbility::AAbility()
@@ -14,6 +14,10 @@ AAbility::AAbility()
 
 	bWantsToPerform = false;
 	bWantsToCooldown = false;
+	bHasAimingState = false;
+
+	bIsPerforming = false;
+	bIsAiming = false;
 	
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PrePhysics;
@@ -52,6 +56,18 @@ void AAbility::StopPerform()
 	}
 }
 
+void AAbility::ConfirmAim()
+{
+	if (Role < ROLE_Authority)
+		ServerConfirmAim();
+
+	if (!bWantsToConfirmAim)
+	{
+		bWantsToConfirmAim = true;
+		DetermineState();
+	}
+}
+
 bool AAbility::ServerStartPerform_Validate()
 {
 	return true;
@@ -82,6 +98,16 @@ void AAbility::ServerHandlePerform_Implementation()
 	HandlePerform();
 }
 
+bool AAbility::ServerConfirmAim_Validate()
+{
+	return true;
+}
+
+void AAbility::ServerConfirmAim_Implementation()
+{
+	ConfirmAim();
+}
+
 void AAbility::HandlePerform()
 {
 	characterOwner->GetFollowCamera()->bUsePawnControlRotation = true;
@@ -93,9 +119,17 @@ void AAbility::HandlePerform()
 		if (GetNetMode() != NM_DedicatedServer)
 			StartPerformEffects();
 
+		bIsPerforming = true;
+
 		if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
 		{
-			Perform();
+			if (executionTimeInfo.duration > 0.f)
+			{
+				ServerStartExecutionTimer();
+				GetWorldTimerManager().SetTimer(executionTimer, this, &AAbility::Perform, executionTimeInfo.duration);
+			}
+			else
+				Perform();
 		}
 	}
 	else if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
@@ -112,12 +146,19 @@ void AAbility::HandlePerform()
 
 void AAbility::OnStopPerform()
 {
-	characterOwner->GetFollowCamera()->bUsePawnControlRotation = false;
-	characterOwner->bUseControllerRotationYaw = false;
-	characterOwner->GetCharacterMovement()->bOrientRotationToMovement = true;
+	if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
+	{
+		characterOwner->GetFollowCamera()->bUsePawnControlRotation = false;
+		characterOwner->bUseControllerRotationYaw = false;
+		characterOwner->GetCharacterMovement()->bOrientRotationToMovement = true;
+
+		OnAbilityStopped();
+	}
 
 	if (GetNetMode() != NM_DedicatedServer)
 		StopPerformEffects();
+
+	bIsPerforming = false;
 }
 
 void AAbility::DetermineState()
@@ -130,8 +171,28 @@ void AAbility::DetermineState()
 		newState = EAbilityState::Disabled;
 	else if (IsValid(characterOwner))
 	{
-		if (bWantsToPerform && CanPerform() && characterOwner->CanPerformAbilities())
+		if (bWantsToPerform && CanPerform() && characterOwner->CanPerformAbilities() && currentState != EAbilityState::Aiming)
+		{
+			//stop equipment use
+			AEquipmentItem* equipment = characterOwner->GetCurrentEquipment();
+			if (IsValid(equipment))
+			{
+				equipment->StopUse();
+				equipment->StopAlt();
+			}
+
+			//either aim if we need to or just go straight to performing
+			if (!characterOwner->ShouldQuickAimAbilities() && bHasAimingState)
+				newState = EAbilityState::Aiming;
+			else
+				newState = EAbilityState::Performing;
+		}
+		else if (bWantsToConfirmAim && CanPerform() && characterOwner->CanPerformAbilities() && currentState == EAbilityState::Aiming)
+		{
 			newState = EAbilityState::Performing;
+			bWantsToConfirmAim = false;
+		}
+			
 	}
 	else
 		newState = EAbilityState::NoOwner;
@@ -145,11 +206,21 @@ void AAbility::SetState(EAbilityState newState)
 
 	if (prevState == EAbilityState::Performing && newState != EAbilityState::Performing)
 		OnStopPerform();
+	else if (prevState == EAbilityState::Aiming && newState != EAbilityState::Aiming)
+	{
+		bIsAiming = false;
+		OnAimingStopped();
+	}
 
 	currentState = newState;
 
 	if (prevState != EAbilityState::Performing && currentState == EAbilityState::Performing)
 		HandlePerform();
+	else if (prevState != EAbilityState::Aiming && currentState == EAbilityState::Aiming)
+	{
+		bIsAiming = true;
+		OnAimingStarted();
+	}
 
 	if (bWantsToCooldown && currentState == EAbilityState::OnCooldown)
 		bWantsToCooldown = false;
@@ -339,9 +410,36 @@ void AAbility::ServerLaunchProjectile_Implementation(const FVector& origin, cons
 	}
 }
 
+bool AAbility::ServerStartExecutionTimer_Validate()
+{
+	return true;
+}
+
+void AAbility::ServerStartExecutionTimer_Implementation()
+{
+	if (IsValid(characterOwner))
+		characterOwner->AllApplyAction(executionTimeInfo);
+}
+
 void AAbility::OnRep_CharacterOwner()
 {
 	DetermineState();
+}
+
+void AAbility::OnRep_IsPerforming()
+{
+	if (bIsPerforming)
+		HandlePerform();
+	else
+		OnStopPerform();
+}
+
+void AAbility::OnRep_IsAiming()
+{
+	if (bIsAiming)
+		OnAimingStarted();
+	else
+		OnAimingStopped();
 }
 
 void AAbility::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -350,4 +448,5 @@ void AAbility::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifet
 
 	DOREPLIFETIME(AAbility, characterOwner);
 	DOREPLIFETIME(AAbility, veteranLevel);
+	DOREPLIFETIME(AAbility, bIsPerforming);
 }

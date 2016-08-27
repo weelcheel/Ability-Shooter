@@ -308,6 +308,10 @@ void AEquipmentItem::DetermineEquipmentState()
 
 void AEquipmentItem::OnBurstStarted()
 {
+	characterOwner->GetFollowCamera()->bUsePawnControlRotation = true;
+	characterOwner->bUseControllerRotationYaw = true;
+	characterOwner->GetCharacterMovement()->bOrientRotationToMovement = false;
+
 	const float gameTime = GetWorld()->GetTimeSeconds();
 	if (lastUseTime > 0.f && timesBetweenUse > 0.f && lastUseTime + timesBetweenUse > gameTime)
 		GetWorldTimerManager().SetTimer(handleFiringTimer, this, &AEquipmentItem::HandleUsing, lastUseTime + timesBetweenUse - gameTime, false);
@@ -317,6 +321,10 @@ void AEquipmentItem::OnBurstStarted()
 
 void AEquipmentItem::OnBurstFinished()
 {
+	characterOwner->GetFollowCamera()->bUsePawnControlRotation = false;
+	characterOwner->bUseControllerRotationYaw = false;
+	characterOwner->GetCharacterMovement()->bOrientRotationToMovement = true;
+
 	burstCounter = 0;
 
 	if (GetNetMode() != NM_DedicatedServer)

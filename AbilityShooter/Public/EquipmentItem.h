@@ -29,7 +29,7 @@ protected:
 	// Variables
 
 	/** character owner */
-	UPROPERTY(Transient, ReplicatedUsing = OnRep_characterOwner)
+	UPROPERTY(BlueprintReadOnly, Transient, ReplicatedUsing = OnRep_characterOwner, Category = Ability)
 	class AAbilityShooterCharacter* characterOwner;
 
 	/** equipment mesh: 3rd person view */

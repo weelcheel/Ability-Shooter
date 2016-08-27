@@ -31,6 +31,7 @@ AProjectile::AProjectile()
 	movement->MaxSpeed = 2000.f;
 	movement->bRotationFollowsVelocity = true;
 	movement->ProjectileGravityScale = 0.f;
+	movement->bInitialVelocityInLocalSpace = false;
 
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PrePhysics;
@@ -60,6 +61,13 @@ void AProjectile::OnImpact(const FHitResult& hitResult)
 {
 	if (Role == ROLE_Authority && !bExploded)
 	{
+		if (!projConfig.bExplodeOnAnyImpact)
+		{
+			AAbilityShooterCharacter* character = Cast<AAbilityShooterCharacter>(hitResult.GetActor());
+			if (!IsValid(character))
+				return;
+		}
+
 		Explode(hitResult);
 		DisableAndDestroy();
 	}

@@ -39,3 +39,8 @@ float AAbilityShooterGameMode::GetRespawnTime(AAbilityShooterPlayerController* p
 
 	return basePlayerRespawnTime + ((GetWorld()->TimeSeconds / 60.f) * 1.5f);
 }
+
+bool AAbilityShooterGameMode::CanDealDamage(AASPlayerState* damageInstigator, AASPlayerState* damagedPlayer) const
+{
+	return true;
+}

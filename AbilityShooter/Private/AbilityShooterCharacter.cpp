@@ -5,6 +5,8 @@
 #include "EquipmentItem.h"
 #include "AbilityShooterPlayerController.h"
 #include "Ability.h"
+#include "ASPlayerState.h"
+#include "GameFramework/GameState.h"
 #include "UnrealNetwork.h"
 
 //////////////////////////////////////////////////////////////////////////
@@ -137,6 +139,25 @@ void AAbilityShooterCharacter::OnRep_PlayerState()
 	Super::OnRep_PlayerState();
 
 	//@TODO: set team color now that we have a player state on the client
+}
+
+bool AAbilityShooterCharacter::IsEnemyFor(AController* testPC) const
+{
+	if (testPC == GetController() || !IsValid(testPC))
+		return false;
+
+	AASPlayerState* testPlayerState = Cast<AASPlayerState>(testPC->PlayerState);
+	AASPlayerState* thisPlayerState = Cast<AASPlayerState>(PlayerState);
+
+	bool bIsEnemy = true;
+	if (GetWorld()->GameState && GetWorld()->GameState->GameModeClass)
+	{
+		const AAbilityShooterGameMode* defGame = GetWorld()->GameState->GameModeClass->GetDefaultObject<AAbilityShooterGameMode>();
+		if (IsValid(defGame) && IsValid(thisPlayerState) && IsValid(testPlayerState))
+			bIsEnemy = defGame->CanDealDamage(testPlayerState, thisPlayerState);
+	}
+
+	return bIsEnemy;
 }
 
 FRotator AAbilityShooterCharacter::GetAimOffsets() const
@@ -859,6 +880,9 @@ void AAbilityShooterCharacter::ApplyAilment(const FAilmentInfo& info)
 
 	switch (currentAilment.type)
 	{
+	case EAilment::AL_None:
+		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+		break;
 	case EAilment::AL_Knockup: //a knockup is a stun that displaces the character a certain distance.
 		GetCapsuleComponent()->AddImpulse(currentAilment.dir);
 		break;
@@ -880,15 +904,15 @@ void AAbilityShooterCharacter::EndCurrentAilment()
 {
 	GetWorldTimerManager().ClearTimer(ailmentTimer);
 
+	FAilmentInfo nextAilment;
+	currentAilment = nextAilment;
+
 	if (!ailmentQueue.IsEmpty())
 	{
-		FAilmentInfo nextAilment;
 		ailmentQueue.Dequeue(nextAilment);
-
-		ApplyAilment(nextAilment);
 	}
-	else
-		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+
+	ApplyAilment(nextAilment);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -908,6 +932,7 @@ void AAbilityShooterCharacter::GetLifetimeReplicatedProps(TArray< FLifetimePrope
 
 	// only to local owner: weapon change requests are locally instigated, other clients don't need it
 	DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, equipmentInventory, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, abilities, COND_OwnerOnly);
 
 	// everyone except local owner: flag change is locally instigated
 	//DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, bIsTargeting, COND_SkipOwner);

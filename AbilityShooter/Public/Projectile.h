@@ -8,10 +8,6 @@ struct FProjectileData
 {
 	GENERATED_USTRUCT_BODY()
 
-	/** projectile class */
-	UPROPERTY(EditDefaultsOnly, Category = Projectile)
-	TSubclassOf<class AProjectile> type;
-
 	/** life time */
 	UPROPERTY(EditDefaultsOnly, Category = Projectile)
 	float lifespan;
@@ -24,6 +20,10 @@ struct FProjectileData
 	UPROPERTY(EditDefaultsOnly, Category = Projectile)
 	float explosionRadius;
 
+	/** whether or not this projectile explodes on any impact or just character impact */
+	UPROPERTY(EditDefaultsOnly, Category = Projectile)
+	bool bExplodeOnAnyImpact;
+
 	/** type of damage */
 	UPROPERTY(EditDefaultsOnly, Category = Projectile)
 	TSubclassOf<UDamageType> damageType;
@@ -31,10 +31,10 @@ struct FProjectileData
 	/** defaults */
 	FProjectileData()
 	{
-		type = NULL;
 		lifespan = 10.0f;
 		explosionDamage = 100;
 		explosionRadius = 300.0f;
+		bExplodeOnAnyImpact = false;
 		damageType = UDamageType::StaticClass();
 	}
 };
@@ -75,9 +75,6 @@ protected:
 	/* initial setup */
 	virtual void PostInitializeComponents() override;
 
-	/* setup velocity */
-	void InitVelocity(FVector& dir);
-
 	/* handle hit */
 	UFUNCTION()
 	void OnImpact(const FHitResult& hitResult);
@@ -101,4 +98,7 @@ protected:
 
 public:
 	AProjectile();
+
+	/* setup velocity */
+	void InitVelocity(FVector& dir);
 };

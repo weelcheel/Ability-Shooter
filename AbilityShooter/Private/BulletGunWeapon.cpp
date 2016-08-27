@@ -129,8 +129,6 @@ void ABulletGunWeapon::UseAmmo()
 
 void ABulletGunWeapon::UseEquipment()
 {
-	Super::UseEquipment();
-
 	FireWeapon();
 }
 
@@ -151,8 +149,8 @@ void ABulletGunWeapon::FireWeapon()
 	if (impact.bBlockingHit)
 	{
 		const FVector origin = GetMuzzleLocation();
-		impact = EquipmentTrace(origin, impact.Location);
-		DrawDebugLine(GetWorld(), origin, impact.Location, FColor::Red, true, 5.f, 0, 0.5f);
+		FHitResult newimpact = EquipmentTrace(origin, impact.Location);
+		DrawDebugLine(GetWorld(), origin, newimpact.Location, FColor::Red, true, 5.f, 0, 0.5f);
 
 		ProcessInstantHit(impact, origin, shootDir, randomSeed, currentSpread);
 	}
@@ -496,6 +494,7 @@ void ABulletGunWeapon::OnAltStarted()
 		characterOwner->GetFollowCamera()->bUsePawnControlRotation = true;
 		characterOwner->bUseControllerRotationYaw = true;
 		characterOwner->GetCharacterMovement()->bOrientRotationToMovement = false;
+
 		characterOwner->GetCharacterMovement()->MaxWalkSpeed *= weaponConfig.aimingMoveScale;
 		characterOwner->GetCameraBoom()->TargetArmLength *= weaponConfig.aimingCamScale;
 		characterOwner->GetCameraBoom()->SocketOffset.Y += 50.f;

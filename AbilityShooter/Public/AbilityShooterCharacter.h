@@ -372,5 +372,9 @@ public:
 	/* [server] adds a type of ability to this character's inventory */
 	UFUNCTION(BlueprintCallable, Category = Abilities)
 	void AddAbility(TSubclassOf<AAbility> newType);
+
+	/* whether or not this character is an enemy for a controller */
+	UFUNCTION(BlueprintCallable, Category = Enemy)
+	bool IsEnemyFor(AController* testPC) const;
 };
 

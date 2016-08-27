@@ -3,6 +3,8 @@
 #include "GameFramework/GameMode.h"
 #include "AbilityShooterGameMode.generated.h"
 
+class AASPlayerState;
+
 UCLASS(minimalapi)
 class AAbilityShooterGameMode : public AGameMode
 {
@@ -22,6 +24,9 @@ public:
 
 	/* called whenever a Shooter is killed in game */
 	void ShooterKilled(AController* Killer, AController* KilledPlayer, APawn* KilledPawn, const UDamageType* DamageType);
+
+	/* can one player state deal damage to another */
+	bool CanDealDamage(AASPlayerState* damageInstigator, AASPlayerState* damagedPlayer) const;
 };
 
 

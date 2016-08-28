@@ -421,6 +421,27 @@ void AAbility::ServerStartExecutionTimer_Implementation()
 		characterOwner->AllApplyAction(executionTimeInfo);
 }
 
+void AAbility::ConeTrace(FVector& start, FVector& end, float boxSize, TArray<FHitResult>& outHits)
+{
+	TArray<FHitResult> hits;
+	FVector halfSize(boxSize, boxSize, boxSize);
+
+	FCollisionShape box = FCollisionShape::MakeBox(halfSize * 0.5f);
+	GetWorld()->SweepMultiByChannel(hits, start, end, FRotator::ZeroRotator.Quaternion(), COLLISION_WEAPON, box);
+
+	for (int32 i = 0; i < hits.Num(); i++)
+	{
+		FVector coneNormal = (hits[i].ImpactPoint - start).GetSafeNormal();
+		float objAngle = FMath::Acos(FVector::DotProduct(coneNormal, start));
+		float coneMaxAngle = FMath::Tan(boxSize / (start - end).Size());
+
+		if (objAngle > coneMaxAngle)
+			hits.RemoveAt(i);
+	}
+
+	outHits = hits;
+}
+
 void AAbility::OnRep_CharacterOwner()
 {
 	DetermineState();

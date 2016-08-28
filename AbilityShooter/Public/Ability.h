@@ -220,6 +220,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Cooldown)
 	float GetCooldownRemaining() const;
 
+	/* performs a psuedo cone trace for the Ability. Really just a box trace where we check the angles of the hit objects */
+	UFUNCTION(BlueprintCallable, Category = Trace)
+	void ConeTrace(FVector& start, FVector& end, float boxSize, TArray<FHitResult>& outHits);
+
 	/* gets the Ability state */
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	EAbilityState GetCurrentState() const

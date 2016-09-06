@@ -16,10 +16,18 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Respawn)
 	FTimerHandle respawnTimer;
 
+	/* team index this player is on if it's needed for a team game */
+	UPROPERTY(replicated)
+	int32 team;
+
 public:
 	AASPlayerState();
 
 	/* net multicast function to set the respawn timer on all clients but actually performs the respawn on the server */
 	UFUNCTION(NetMulticast, reliable)
 	void SetRespawnTimer(float repsawnTime);
+
+	/* gets the team index for this player */
+	UFUNCTION(BlueprintCallable, Category = Team)
+	int32 GetTeamIndex() const;
 };

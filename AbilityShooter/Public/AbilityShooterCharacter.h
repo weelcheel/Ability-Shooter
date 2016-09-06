@@ -8,6 +8,7 @@
 
 class AEquipmentItem;
 class AAbility;
+class AASPlayerState;
 
 /* types for hard Crowd Control (Ailments) */
 UENUM(BlueprintType)
@@ -129,11 +130,10 @@ protected:
 	AEquipmentItem* currentEquipment;
 
 	/** current abilities in inventory */
-	UPROPERTY(Transient, Replicated)
+	UPROPERTY(Transient, Replicated, VisibleAnywhere, BlueprintReadOnly, Category = Abilities)
 	TArray<AAbility*> abilities;
 
 	/* max number of abilities this Shooter can have */
-	UPROPERTY(BlueprintReadWrite, Category = Abilities)
 	int32 maxAbilityCount;
 
 	/** Time at which point the last take hit info for the actor times out and won't be replicated; Used to stop join-in-progress effects all over the screen */
@@ -265,6 +265,15 @@ protected:
 
 	/** handler for stopping abilities */
 	void OnStopAbility(int32 abilityIndex);
+
+	/* handler for trying to reload the current equipment */
+	void OnTryReload();
+
+	/* handler for using nearby aimed at objects started */
+	void OnUseObjectStart();
+
+	/* handler for using nearby aimed at objects stopped */
+	void OnUseObjectStop();
 
 	// APawn interface
 	virtual void SetupPlayerInputComponent(class UInputComponent* InputComponent) override;
@@ -407,6 +416,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Abilities)
 	void AddAbility(TSubclassOf<AAbility> newType);
 
+	/* [server] adds an already exisiting ability to this character's inventory */
+	UFUNCTION(BlueprintCallable, Category = Abilities)
+	void AddExistingAbility(AAbility* ability);
+
 	/* whether or not this character is an enemy for a controller */
 	UFUNCTION(BlueprintCallable, Category = Enemy)
 	bool IsEnemyFor(AController* testPC) const;
@@ -425,5 +438,12 @@ public:
 
 	/* forcibly end the current action */
 	void ForceEndCurrentAction();
+
+	/* get casted player state */
+	AASPlayerState* GetASPlayerState() const;
+
+	/* get the max number of abilities this character can have */
+	UFUNCTION(BlueprintCallable, Category = Abilities)
+	int32 GetMaxAbilityCount() const;
 };
 

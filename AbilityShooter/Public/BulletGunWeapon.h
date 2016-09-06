@@ -169,11 +169,11 @@ protected:
 	uint32 bLoopedMuzzleFX : 1;
 
 	/** current total ammo */
-	UPROPERTY(Transient, Replicated)
+	UPROPERTY(BlueprintReadOnly, Category=Ammo, Transient, Replicated)
 	int32 currentAmmo;
 
 	/** current ammo - inside clip */
-	UPROPERTY(Transient, Replicated)
+	UPROPERTY(BlueprintReadOnly, Category = Ammo, Transient, Replicated)
 	int32 currentAmmoInClip;
 
 	/** weapon data */
@@ -194,12 +194,6 @@ protected:
 
 	//////////////////////////////////////////////////////////////////////////
 	// Input
-
-	/** [all] start weapon reload */
-	virtual void StartReload(bool bFromReplication = false);
-
-	/** [local + server] interrupt weapon reload */
-	virtual void StopReload();
 
 	/** [server] performs actual reload */
 	virtual void ReloadWeapon();
@@ -301,4 +295,10 @@ protected:
 public:
 
 	ABulletGunWeapon();
+
+	/** [all] start weapon reload */
+	virtual void StartReload(bool bFromReplication = false);
+
+	/** [local + server] interrupt weapon reload */
+	virtual void StopReload();
 };

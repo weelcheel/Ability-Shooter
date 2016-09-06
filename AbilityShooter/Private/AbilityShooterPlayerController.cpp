@@ -4,6 +4,10 @@
 #include "AbilityShooterGameMode.h"
 #include "AbilityShooterCharacter.h"
 #include "Effect.h"
+#include "Ability.h"
+#include "Engine/ActorChannel.h"
+#include "PlayerHUD.h"
+#include "UnrealNetwork.h"
 
 AAbilityShooterPlayerController::AAbilityShooterPlayerController()
 {
@@ -34,7 +38,7 @@ void AAbilityShooterPlayerController::HandleRespawnTimer()
 		if (IsValid(gm))
 		{
 			gm->RestartPlayer(this);
-			
+
 			AAbilityShooterCharacter* ownedCharacter = Cast<AAbilityShooterCharacter>(GetCharacter());
 			if (IsValid(ownedCharacter))
 			{
@@ -46,12 +50,131 @@ void AAbilityShooterPlayerController::HandleRespawnTimer()
 						if (persistentEffects[i].duration <= 0.f)
 							continue;
 					}
-						
+
 					ownedCharacter->ApplyEffect(nullptr, persistentEffects[i]);
 				}
 
+				for (AAbility* ability : persistentAbilities)
+				{
+					if (!IsValid(ability))
+						continue;
+
+					ownedCharacter->AddExistingAbility(ability);
+				}
+
 				persistentEffects.Empty();
+				persistentAbilities.Empty();
 			}
 		}
 	}
+}
+
+void AAbilityShooterPlayerController::UpdateClientQuests_Implementation()
+{
+	APlayerHUD* hud = Cast<APlayerHUD>(GetHUD());
+	if (IsValid(hud))
+	{
+		hud->OnQuestsUpdated();
+	}
+}
+
+void AAbilityShooterPlayerController::GiveQuest(UQuest* newQuest)
+{
+	//don't run if there's no valid quest or we're not on the server
+	if (!IsValid(newQuest) || Role < ROLE_Authority)
+		return;
+
+	newQuest->SetPlayerOwner(this);
+	quests.AddUnique(newQuest);
+
+	UpdateClientQuests();
+}
+
+void AAbilityShooterPlayerController::CompleteQuest(UQuest* quest)
+{
+	if (Role < ROLE_Authority || !IsValid(quest))
+		return;
+
+	OnClientQuestCompleted(quest->GetKey());
+
+	quests.Remove(quest);
+	UpdateClientQuests();
+}
+
+void AAbilityShooterPlayerController::GiveQuestCurrentObjectiveCheckpoint(const FString& questKey)
+{
+	if (Role < ROLE_Authority)
+		return;
+
+	for (UQuest* quest : quests)
+	{
+		if (IsValid(quest) && quest->GetKey() == questKey)
+		{
+			quest->IncrementCurrentObjectiveCheckpoint();
+		}
+	}
+
+	UpdateClientQuests();
+}
+
+void AAbilityShooterPlayerController::GiveQuestNewObjective(const FString& questKey, FQuestObjective& newObjective)
+{
+	if (Role < ROLE_Authority)
+		return;
+
+	for (UQuest* quest : quests)
+	{
+		if (IsValid(quest) && quest->GetKey() == questKey)
+		{
+			quest->AddNewObjective(newObjective);
+		}
+	}
+
+	UpdateClientQuests();
+}
+
+void AAbilityShooterPlayerController::OnClientQuestCompleted_Implementation(const FString& questKey)
+{
+	UQuest* quest = nullptr;
+	for (UQuest* q : quests)
+	{
+		if (IsValid(q) && q->GetKey() == questKey)
+			quest = q;
+	}
+
+	if (!IsValid(quest))
+		return;
+
+	APlayerHUD* hud = Cast<APlayerHUD>(GetHUD());
+	if (IsValid(hud))
+	{
+		hud->OnQuestCompleted(quest);
+	}
+}
+
+bool AAbilityShooterPlayerController::ReplicateSubobjects(class UActorChannel *Channel, class FOutBunch *Bunch, FReplicationFlags *RepFlags)
+{
+	check(Channel && Bunch && RepFlags);
+
+	bool bWroteSomething = Super::ReplicateSubobjects(Channel, Bunch, RepFlags);
+
+	for (int32 i = 0; i < quests.Num(); i++)
+	{
+		if (quests[i])
+			bWroteSomething |= Channel->ReplicateSubobject(quests[i], *Bunch, *RepFlags);
+	}
+
+	return bWroteSomething;
+}
+
+void AAbilityShooterPlayerController::GetKeysForAction(FName actionName, TArray<FInputActionKeyMapping>& bindings)
+{
+	bindings = PlayerInput->GetKeysForAction(actionName);
+}
+
+void AAbilityShooterPlayerController::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(AAbilityShooterPlayerController, quests);
 }

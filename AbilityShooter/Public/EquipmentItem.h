@@ -1,5 +1,10 @@
 #pragma once
 
+#include "Runtime/UMG/Public/UMG.h"
+#include "Runtime/UMG/Public/UMGStyle.h"
+#include "Runtime/UMG/Public/Slate/SObjectWidget.h"
+#include "Runtime/UMG/Public/IUMGModule.h"
+#include "Runtime/UMG/Public/Blueprint/UserWidget.h"
 #include "EquipmentItem.generated.h"
 
 class AAbilityShooterCharacter;
@@ -27,6 +32,10 @@ protected:
 
 	/* ---------------------------------------------------------------------- */
 	// Variables
+
+	/* ui name of this weapon */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = UI)
+	FText uiName;
 
 	/** character owner */
 	UPROPERTY(BlueprintReadOnly, Transient, ReplicatedUsing = OnRep_characterOwner, Category = Ability)
@@ -279,6 +288,11 @@ protected:
 	void OnUseEnded();
 
 public:
+
+	/* class of widget we should use for this equipment to display to the HUD */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = HUD)
+	TSubclassOf<UUserWidget> equipmentWidgetClass;
+
 	AEquipmentItem();
 
 	/* gets the mesh of the equipment */

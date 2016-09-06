@@ -231,12 +231,23 @@ void AAbility::SetupAbility(AAbilityShooterCharacter* newOwner)
 	if (Role < ROLE_Authority)
 		return;
 
-	SetOwner(newOwner);
-	FAttachmentTransformRules rules(EAttachmentRule::SnapToTarget, false);
-	AttachToActor(newOwner, rules);
+	if (IsValid(newOwner))
+	{
+		SetOwner(newOwner);
+		FAttachmentTransformRules rules(EAttachmentRule::SnapToTarget, false);
+		AttachToActor(newOwner, rules);
 
-	characterOwner = newOwner;
-	currentState = EAbilityState::Idle;
+		characterOwner = newOwner;
+	}
+	else
+	{
+		characterOwner = nullptr;
+
+		FDetachmentTransformRules rules(EDetachmentRule::KeepWorld, false);
+		DetachFromActor(rules);
+	}
+	
+	DetermineState();
 }
 
 void AAbility::AddVeteranLevel()

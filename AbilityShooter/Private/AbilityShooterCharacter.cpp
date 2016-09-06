@@ -8,6 +8,7 @@
 #include "ASPlayerState.h"
 #include "GameFramework/GameState.h"
 #include "UnrealNetwork.h"
+#include "BulletGunWeapon.h"
 
 //////////////////////////////////////////////////////////////////////////
 // AAbilityShooterCharacter
@@ -125,6 +126,30 @@ void AAbilityShooterCharacter::AddAbility(TSubclassOf<AAbility> newType)
 		newAbility->SetupAbility(this);
 		abilities.AddUnique(newAbility);
 	}
+}
+
+void AAbilityShooterCharacter::AddExistingAbility(AAbility* ability)
+{
+	//only run on server with a valid ability
+	if (Role < ROLE_Authority || !IsValid(ability) || ability->GetCurrentState() != EAbilityState::NoOwner)
+		return;
+
+	//don't add if we don't have enough room
+	if (abilities.Num() + 1 > GetMaxAbilityCount())
+		return;
+
+	//don't add if the Shooter already has an ultimate
+	if (ability->bUltimateAbility)
+	{
+		for (AAbility* locability : abilities)
+		{
+			if (locability->bUltimateAbility)
+				return;
+		}
+	}
+
+	ability->SetupAbility(this);
+	abilities.AddUnique(ability);
 }
 
 void AAbilityShooterCharacter::PossessedBy(class AController* C)
@@ -285,6 +310,9 @@ void AAbilityShooterCharacter::SetupPlayerInputComponent(class UInputComponent* 
 	InputComponent->BindAction("Primary", IE_Released, this, &AAbilityShooterCharacter::PrimaryUseStop);
 	InputComponent->BindAction("Alternate", IE_Pressed, this, &AAbilityShooterCharacter::AlternateUseStart);
 	InputComponent->BindAction("Alternate", IE_Released, this, &AAbilityShooterCharacter::AlternateUseStop);
+	InputComponent->BindAction("Reload", IE_Pressed, this, &AAbilityShooterCharacter::OnTryReload);
+	InputComponent->BindAction("Use", IE_Pressed, this, &AAbilityShooterCharacter::OnUseObjectStart);
+	InputComponent->BindAction("Use", IE_Released, this, &AAbilityShooterCharacter::OnUseObjectStop);
 
 	//ability interaction
 	InputComponent->BindAction("Ability1", IE_Pressed, this, &AAbilityShooterCharacter::UseAbilityStart<0>);
@@ -293,6 +321,14 @@ void AAbilityShooterCharacter::SetupPlayerInputComponent(class UInputComponent* 
 	InputComponent->BindAction("Ability2", IE_Released, this, &AAbilityShooterCharacter::UseAbilityStop<1>);
 	InputComponent->BindAction("Ultimate", IE_Pressed, this, &AAbilityShooterCharacter::UseAbilityStart<2>);
 	InputComponent->BindAction("Ultimate", IE_Released, this, &AAbilityShooterCharacter::UseAbilityStop<2>);
+	InputComponent->BindAction("Ability4", IE_Pressed, this, &AAbilityShooterCharacter::UseAbilityStart<3>);
+	InputComponent->BindAction("Ability4", IE_Released, this, &AAbilityShooterCharacter::UseAbilityStop<3>);
+	InputComponent->BindAction("Ability5", IE_Pressed, this, &AAbilityShooterCharacter::UseAbilityStart<4>);
+	InputComponent->BindAction("Ability5", IE_Released, this, &AAbilityShooterCharacter::UseAbilityStop<4>);
+	InputComponent->BindAction("Ability6", IE_Pressed, this, &AAbilityShooterCharacter::UseAbilityStart<5>);
+	InputComponent->BindAction("Ability6", IE_Released, this, &AAbilityShooterCharacter::UseAbilityStop<5>);
+	InputComponent->BindAction("Ability7", IE_Pressed, this, &AAbilityShooterCharacter::UseAbilityStart<6>);
+	InputComponent->BindAction("Ability7", IE_Released, this, &AAbilityShooterCharacter::UseAbilityStop<6>);
 }
 
 void AAbilityShooterCharacter::ReplicateHit(float Damage, struct FDamageEvent const& DamageEvent, class APawn* PawnInstigator, class AActor* DamageCauser, bool bKilled)
@@ -473,6 +509,8 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FDamageEvent const &
 
 		if (IsValid(pc) && Role == ROLE_Authority)
 		{
+			//transfer things that need to be to the player controller
+			//transfer persistent effects
 			if (effect->bPersistThruDeath)
 			{
 				FEffectInitInfo persistentInfo;
@@ -491,7 +529,21 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FDamageEvent const &
 		}
 
 		EndEffect(effect);
+		abilities.Empty();
+
 		i--;
+	}
+
+	if (IsValid(pc) && Role == ROLE_Authority)
+	{
+		//transfer abilities
+		for (AAbility* ability : abilities)
+		{
+			ability->SetupAbility(nullptr);
+			pc->persistentAbilities.AddUnique(ability);
+		}
+
+		abilities.Empty();
 	}
 	
 	// cannot use IsLocallyControlled here, because even local client's controller may be NULL here
@@ -970,6 +1022,35 @@ void AAbilityShooterCharacter::ForceEndCurrentAction()
 
 		currentAction = FCharacterActionInfo();
 	}
+}
+
+AASPlayerState* AAbilityShooterCharacter::GetASPlayerState() const
+{
+	return Cast<AASPlayerState>(PlayerState);
+}
+
+int32 AAbilityShooterCharacter::GetMaxAbilityCount() const
+{
+	return maxAbilityCount;
+}
+
+void AAbilityShooterCharacter::OnTryReload()
+{
+	ABulletGunWeapon* weap = Cast<ABulletGunWeapon>(currentEquipment);
+	if (IsValid(weap))
+	{
+		weap->StartReload();
+	}
+}
+
+void AAbilityShooterCharacter::OnUseObjectStart()
+{
+
+}
+
+void AAbilityShooterCharacter::OnUseObjectStop()
+{
+
 }
 
 //////////////////////////////////////////////////////////////////////////

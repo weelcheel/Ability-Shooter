@@ -11,7 +11,7 @@ AEquipmentItem::AEquipmentItem()
 	mesh->MeshComponentUpdateFlag = EMeshComponentUpdateFlag::OnlyTickPoseWhenRendered;
 	mesh->CastShadow = true;
 	mesh->SetCollisionObjectType(ECC_WorldDynamic);
-	mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	mesh->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
 	mesh->SetCollisionResponseToAllChannels(ECR_Ignore);
 	mesh->SetCollisionResponseToChannel(COLLISION_WEAPON, ECR_Block);
 	mesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
@@ -121,6 +121,9 @@ void AEquipmentItem::AttachMeshToCharacter()
 	if (IsValid(characterOwner))
 	{
 		DetachMeshFromCharacter();
+		mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Ignore);
+		mesh->SetSimulatePhysics(false);
+		mesh->PutRigidBodyToSleep();
 
 		FName attachPoint = characterOwner->GetEquipmentAttachPoint();
 		USkeletalMeshComponent* charMesh = characterOwner->GetMesh();
@@ -136,7 +139,11 @@ void AEquipmentItem::DetachMeshFromCharacter()
 	FDetachmentTransformRules rules(EDetachmentRule::KeepRelative, false);
 
 	mesh->DetachFromComponent(rules);
-	mesh->SetHiddenInGame(true);
+	//mesh->SetHiddenInGame(true);
+
+	mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
+	mesh->SetSimulatePhysics(true);
+	mesh->WakeRigidBody();
 }
 
 void AEquipmentItem::StartUse()
@@ -324,9 +331,12 @@ void AEquipmentItem::OnBurstStarted()
 
 void AEquipmentItem::OnBurstFinished()
 {
-	characterOwner->GetFollowCamera()->bUsePawnControlRotation = false;
-	characterOwner->bUseControllerRotationYaw = false;
-	characterOwner->GetCharacterMovement()->bOrientRotationToMovement = true;
+	if (!bIsAltActive)
+	{
+		characterOwner->GetFollowCamera()->bUsePawnControlRotation = false;
+		characterOwner->bUseControllerRotationYaw = false;
+		characterOwner->GetCharacterMovement()->bOrientRotationToMovement = true;
+	}
 
 	burstCounter = 0;
 
@@ -341,8 +351,8 @@ void AEquipmentItem::OnBurstFinished()
 
 void AEquipmentItem::OnAltStarted()
 {
-	/*if (IsValid(characterOwner))
-		characterOwner->bWantsToUseAlt = true;*/
+	if (IsValid(characterOwner))
+		characterOwner->bWantsToUseAlt = true;
 	if (IsValid(characterOwner) && !characterOwner->CanUseEquipment())
 		return;
 
@@ -353,8 +363,8 @@ void AEquipmentItem::OnAltStarted()
 
 void AEquipmentItem::OnAltFinished()
 {
-	/*if (IsValid(characterOwner))
-		characterOwner->bWantsToUseAlt = false;*/
+	if (IsValid(characterOwner))
+		characterOwner->bWantsToUseAlt = false;
 
 	bIsAltActive = false;
 

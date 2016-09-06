@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GameFramework/HUD.h"
+#include "Quest.h"
 #include "PlayerHUD.generated.h"
 
 class UUserWidget;
@@ -35,4 +36,12 @@ public:
 	/* called whenever the current effects list of the owner is updated */
 	UFUNCTION(BlueprintImplementableEvent, Category=Effects)
 	void OnEffectsListUpdate();
+
+	/* called whenever the current set of quests has updated */
+	UFUNCTION(BlueprintImplementableEvent, Category = Quests)
+	void OnQuestsUpdated();
+
+	/* called whenever the a quest is completed and it is removed from the quest list and rewards are given */
+	UFUNCTION(BlueprintImplementableEvent, Category = Quests)
+	void OnQuestCompleted(UQuest* quest);
 };

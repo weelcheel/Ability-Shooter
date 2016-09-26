@@ -2,16 +2,16 @@
 #include "AbilityShooterPlayerController.h"
 #include "ASPlayerState.h"
 #include "AbilityShooterGameMode.h"
-#include "AbilityShooterCharacter.h"
 #include "Effect.h"
 #include "Ability.h"
 #include "Engine/ActorChannel.h"
 #include "PlayerHUD.h"
+#include "StatsManager.h"
 #include "UnrealNetwork.h"
 
 AAbilityShooterPlayerController::AAbilityShooterPlayerController()
 {
-
+	statsManager = CreateDefaultSubobject<UStatsManager>(TEXT("statsManager"));
 }
 
 void AAbilityShooterPlayerController::SetRespawnTimer(float respawnTime)
@@ -170,6 +170,13 @@ bool AAbilityShooterPlayerController::ReplicateSubobjects(class UActorChannel *C
 void AAbilityShooterPlayerController::GetKeysForAction(FName actionName, TArray<FInputActionKeyMapping>& bindings)
 {
 	bindings = PlayerInput->GetKeysForAction(actionName);
+}
+
+void AAbilityShooterPlayerController::Possess(APawn* InPawn)
+{
+	currentCharacter = Cast<AAbilityShooterCharacter>(InPawn);
+
+	Super::Possess(InPawn);
 }
 
 void AAbilityShooterPlayerController::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const

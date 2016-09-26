@@ -4,11 +4,12 @@
 #include "PlayerHUD.h"
 #include "EquipmentItem.h"
 #include "AbilityShooterPlayerController.h"
-#include "Ability.h"
 #include "ASPlayerState.h"
 #include "GameFramework/GameState.h"
 #include "UnrealNetwork.h"
 #include "BulletGunWeapon.h"
+#include "DrawDebugHelpers.h"
+#include "Ability.h"
 
 //////////////////////////////////////////////////////////////////////////
 // AAbilityShooterCharacter
@@ -54,11 +55,14 @@ AAbilityShooterCharacter::AAbilityShooterCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // Attach the camera to the end of the boom and let the boom adjust to match the controller orientation
 	FollowCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
 
+	statsManager = CreateDefaultSubobject<UStatsManager>(TEXT("statsManager"));
+	statsManager->SetOwningCharacter(this);
+
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named MyCharacter (to avoid direct content references in C++)
 	
 	health = 100.f;
-	maxAbilityCount = 3;
+	maxAbilityCount = 7;
 }
 
 void AAbilityShooterCharacter::PostInitializeComponents()
@@ -98,6 +102,43 @@ void AAbilityShooterCharacter::PawnClientRestart()
 	SetCurrentEquipment(currentEquipment);
 
 	//@TODO: set mesh team color material instance
+}
+
+void AAbilityShooterCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (IsValid(GetCharacterMovement()))
+	{
+		GetCharacterMovement()->MaxWalkSpeed = GetCurrentStat(EStat::ES_Move);
+	}
+
+	//get any usable objects
+	if (IsLocallyControlled())
+	{
+		AActor* newUseObject = nullptr;
+		const FVector start = GetFollowCamera()->GetComponentLocation();
+		const FVector dir = GetFollowCamera()->GetComponentRotation().Vector();
+		const float dist = (start - GetActorLocation()).Size();
+		const FVector end = start + dir * (dist + 150.f);
+
+		//DrawDebugLine(GetWorld(), start, end, FColor::Emerald, true, 5.f, 0, 0.5f);
+
+		FHitResult hit;
+		FCollisionQueryParams params;
+		params.AddIgnoredActor(this);
+		GetWorld()->LineTraceSingleByChannel(hit, start, end, ECC_WorldStatic, params);
+
+		if (IsValid(hit.GetActor()) && hit.GetActor()->Tags.Contains(TEXT("usable")))
+			newUseObject = hit.GetActor();
+
+		currentUseObject = newUseObject;
+	}
+}
+
+void AAbilityShooterCharacter::OnRep_ClientMoveSpeed()
+{
+	
 }
 
 void AAbilityShooterCharacter::AddAbility(TSubclassOf<AAbility> newType)
@@ -707,7 +748,7 @@ void AAbilityShooterCharacter::OnStartAbility(int32 abilityIndex)
 void AAbilityShooterCharacter::OnStopAbility(int32 abilityIndex)
 {
 	if (abilityIndex >= 0 && abilityIndex < abilities.Num() && IsValid(abilities[abilityIndex]))
-		abilities[abilityIndex]->StopPerform();
+		abilities[abilityIndex]->StopPerform(true);
 }
 
 void AAbilityShooterCharacter::TurnAtRate(float Rate)
@@ -748,6 +789,7 @@ void AAbilityShooterCharacter::MoveRight(float Value)
 		const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 		// add movement in that direction
 		AddMovementInput(Direction, Value);
+		SendInterruptToAbilities(EAbilityInterruptSignal::VelocityDirectionChanged);
 	}
 }
 
@@ -893,36 +935,58 @@ void AAbilityShooterCharacter::EndEffect(UEffect* endingEffect)
 	}
 }
 
+void AAbilityShooterCharacter::EndEffectByKey(const FString& key)
+{
+	for (int32 i = 0; i < currentEffects.Num(); i++)
+	{
+		if (currentEffects[i]->GetKey() == key)
+		{
+			EndEffect(currentEffects[i]);
+			break;
+		}
+	}
+}
+
 void AAbilityShooterCharacter::ForceEndEffect_Implementation(const FString& key)
 {
 	for (UEffect* effect : currentEffects)
 	{
 		if (effect->key == key)
+		{
 			EndEffect(effect);
+			break;
+		}
 	}
 }
 
 float AAbilityShooterCharacter::GetCurrentStat(EStat stat) const
 {
-	float statDelta = 1.f;
+	float statDelta = IsValid(statsManager) ? statsManager->GetCurrentStatValue(stat) : 0.f;
+
+	//next, go thru the effects for the character and factor in those stat changes
 	for (UEffect* effect : currentEffects)
 	{
-		for (int32 i = 0; i < effect->statAlters.Num(); i++)
+		for (FEffectStatAlter statAlter : effect->statAlters)
 		{
-			if (effect->statAlters[i].effectToAlter == stat)
-				statDelta += effect->statAlters[i].deltaStat;
+			if (statAlter.alteredStat == stat)
+				statDelta += statAlter.deltaStat;
 		}
 	}
 
 	switch (stat)
 	{
 	case EStat::ES_EquipUseRate:
-		if (IsValid(currentEquipment))
+		if (IsValid(currentEquipment) && statDelta > 0.f)
 			return currentEquipment->timesBetweenUse * statDelta;
-		break;
+		else
+			return currentEquipment->timesBetweenUse;
+	case EStat::ES_CritRatio:
+		return statDelta > 0.f ? baseStats.critRatio * statDelta : baseStats.critRatio;
+	case EStat::ES_Acc:
+		return statDelta > 0.f ? baseStats.accuracy * statDelta : baseStats.accuracy;
 	}
 
-	return 0.f;
+	return statDelta;
 }
 
 void AAbilityShooterCharacter::OnRep_Ailment()
@@ -962,6 +1026,8 @@ void AAbilityShooterCharacter::ApplyAilment(const FAilmentInfo& info)
 
 	if (currentAilment.duration > 0.f)
 		GetWorldTimerManager().SetTimer(ailmentTimer, this, &AAbilityShooterCharacter::EndCurrentAilment, currentAilment.duration);
+
+	SendInterruptToAbilities(EAbilityInterruptSignal::AilmentAcquired);
 }
 
 FAilmentInfo AAbilityShooterCharacter::GetCurrentAilment() const
@@ -1045,12 +1111,50 @@ void AAbilityShooterCharacter::OnTryReload()
 
 void AAbilityShooterCharacter::OnUseObjectStart()
 {
-
+	ServerUseCurrentObjectStarted(currentUseObject);
 }
 
 void AAbilityShooterCharacter::OnUseObjectStop()
 {
+	ServerUseCurrentObjectStopped(currentUseObject);
+}
 
+bool AAbilityShooterCharacter::ServerUseCurrentObjectStarted_Validate(AActor* useObject)
+{
+	return true;
+}
+
+void AAbilityShooterCharacter::ServerUseCurrentObjectStarted_Implementation(AActor* useObject)
+{
+	if (IsValid(useObject))
+	{
+		//try equipping it if we're 'using' (picking up) equipment
+		AEquipmentItem* equip = Cast<AEquipmentItem>(useObject);
+		if (IsValid(equip))
+		{
+			AddEquipment(equip);
+			EquipEquipment(equip);
+		}
+	}
+}
+
+bool AAbilityShooterCharacter::ServerUseCurrentObjectStopped_Validate(AActor* useObject)
+{
+	return true;
+}
+
+void AAbilityShooterCharacter::ServerUseCurrentObjectStopped_Implementation(AActor* useObject)
+{
+	
+}
+
+void AAbilityShooterCharacter::SendInterruptToAbilities(EAbilityInterruptSignal signal)
+{
+	for (AAbility* ability : abilities)
+	{
+		if (ability->GetCurrentState() == EAbilityState::Performing)
+			ability->HandleInterrupt(signal);
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1082,4 +1186,5 @@ void AAbilityShooterCharacter::GetLifetimeReplicatedProps(TArray< FLifetimePrope
 	DOREPLIFETIME(AAbilityShooterCharacter, currentEquipment);
 	DOREPLIFETIME(AAbilityShooterCharacter, health);
 	DOREPLIFETIME(AAbilityShooterCharacter, currentAilment);
+	//DOREPLIFETIME(AAbilityShooterCharacter, clientMoveSpeed);
 }

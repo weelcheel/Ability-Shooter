@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AbilityShooterCharacter.h"
+#include "AbilityShooterTypes.h"
 #include "Ability.generated.h"
 
 UENUM()
@@ -47,6 +48,10 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = Cooldown)
 	EAbilityState afterCooldownState;
 
+	/* next manual cooldown time to use */
+	UPROPERTY(BlueprintReadOnly, Category = Cooldown)
+	float manualCooldownTime;
+
 	/* whether or not this Ability automatically enters the performing state on use */
 	UPROPERTY(EditDefaultsOnly, Category = Ability)
 	bool bAutoPerform;
@@ -58,6 +63,22 @@ protected:
 	/* whether or not this Ability has an aiming state available */
 	UPROPERTY(EditDefaultsOnly, Category = Ability)
 	bool bHasAimingState;
+
+	/* whether or not this ability makes the character face the camera's rotation */
+	UPROPERTY(EditDefaultsOnly, Category = Ability)
+	bool bPerformingRotatesOwnerWithAim;
+
+	/* whether or not this ability stops performing when the button is released */
+	UPROPERTY(EditDefaultsOnly, Category = Ability)
+	bool bStopPerformingWhenButtonIsReleased;
+
+	/* whether or not to disable look input when this ability performs */
+	UPROPERTY(EditDefaultsOnly, Category = Ability)
+	bool bIgnoreLookInputWhilePerforming;
+
+	/* whether or not to disable movement when this ability performs */
+	UPROPERTY(EditDefaultsOnly, Category = Ability)
+	bool bIgnoreMovementWhilePerforming;
 
 	/* replicated boolean to give performing effects */
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_IsPerforming)
@@ -99,6 +120,14 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = Ability)
 	void Perform();
 
+	/* perform after testing whether or not this ability should be performed */
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	void ContinueHandlePerform();
+
+	/* if the ability can't auto perform, then determine if it should perform at all */
+	UFUNCTION(BlueprintImplementableEvent, Category = Ability)
+	void ShouldPerform();
+
 	UFUNCTION(BlueprintImplementableEvent, Category = Ability)
 	void OnAbilityStopped();
 
@@ -120,7 +149,7 @@ protected:
 
 	/* server stop perform */
 	UFUNCTION(reliable, server, WithValidation)
-	void ServerStopPerform();
+	void ServerStopPerform(bool bFromInput = false);
 
 	/* server handle perform */
 	UFUNCTION(reliable, server, WithValidation)
@@ -147,6 +176,9 @@ protected:
 
 	/* on stop performing */
 	void OnStopPerform();
+
+	/* actually sets the cooldown timer for this ability */
+	void StartCooldownTimer();
 
 	/* perform a trace for an ability */
 	UFUNCTION(BlueprintCallable, Category = Ability)
@@ -188,7 +220,7 @@ public:
 	void StartPerform();
 
 	/* called locally whenever this Ability is stopped performing (the Ability button is let go) */
-	void StopPerform();
+	void StopPerform(bool bFromInput = false);
 
 	/* called locally to confirm the aim of this Ability (the player pressed the Primary button while aiming this ability) */
 	void ConfirmAim();
@@ -210,7 +242,7 @@ public:
 
 	/* gets a value scaled by this Ability's level from a table of values */
 	UFUNCTION(BlueprintCallable, Category = Ability)
-	float GetVeteranLevelScaledValue(TArray<float>& values) const;
+	float GetVeteranLevelScaledValue(UPARAM(ref) TArray<float>& values) const;
 
 	/* gets the percentage of cooldown progress */
 	UFUNCTION(BlueprintCallable, Category = Cooldown)
@@ -223,6 +255,22 @@ public:
 	/* performs a psuedo cone trace for the Ability. Really just a box trace where we check the angles of the hit objects */
 	UFUNCTION(BlueprintCallable, Category = Trace)
 	void ConeTrace(FVector& start, FVector& end, float boxSize, TArray<FHitResult>& outHits);
+
+	/* interrupt handler */
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	void HandleInterrupt(EAbilityInterruptSignal signal);
+
+	/* make sure we call interrupts on the server because they can be caught on the client (changing directions, etc.) */
+	UFUNCTION(reliable, server, WithValidation)
+	void ServerReceiveInterrupt(EAbilityInterruptSignal signal);
+
+	/* handle ability interrupts while performing */
+	UFUNCTION(BlueprintImplementableEvent, Category = Ability)
+	void AbilityReceivedInterruptSignal(EAbilityInterruptSignal signal);
+
+	/* force this ability to stop performing on all clients and server */
+	UFUNCTION(NetMulticast, reliable, BlueprintCallable, Category = Ability)
+	void ForceStopAbility();
 
 	/* gets the Ability state */
 	UFUNCTION(BlueprintCallable, Category = Ability)

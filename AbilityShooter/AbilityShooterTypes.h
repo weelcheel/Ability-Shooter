@@ -2,6 +2,16 @@
 
 #include "AbilityShooterTypes.generated.h"
 
+UENUM(BlueprintType)
+enum class EAbilityInterruptSignal : uint8
+{
+	UserCancelled,
+	AilmentAcquired,
+	VelocityDirectionChanged,
+	EquipementUsed,
+	MAX
+};
+
 /** replicated information on a hit we've taken */
 USTRUCT()
 struct FTakeHitInfo

@@ -1,15 +1,9 @@
 #pragma once
 
+#include "StatsManager.h"
 #include "Effect.generated.h"
 
 class AAbilityShooterCharacter;
-
-UENUM(BlueprintType)
-enum class EStat : uint8
-{
-	ES_EquipUseRate UMETA(DisplayName = "Equipment Use Rate"),
-	ES_Max UMETA(Hidden)
-};
 
 /* what stat to alter and how much to alter it by (adds the amount to the stat) */
 USTRUCT(Blueprintable)
@@ -19,7 +13,7 @@ struct FEffectStatAlter
 
 	/* stat to alter */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = EffectStat)
-	EStat effectToAlter;
+	EStat alteredStat;
 
 	/* how much to alter the stat */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = EffectStat)
@@ -30,6 +24,7 @@ UCLASS(Blueprintable)
 class UEffect : public UObject
 {
 	friend class AAbilityShooterCharacter;
+	friend class UStatsManager;
 
 	GENERATED_BODY()
 
@@ -55,6 +50,7 @@ protected:
 	bool bPersistThruDeath;
 
 	/* stats this effect alters */
+	UPROPERTY()
 	TArray<FEffectStatAlter> statAlters;
 
 	/* timer that expires whenever this effect is finished */
@@ -149,6 +145,7 @@ struct FEffectInitInfo
 	FTimerHandle persistentTimer;
 
 	/* key for if this effect is persisting through death */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = EffectInfo)
 	FString persistentKey;
 
 	/* game time this persistent effect was removed from the character */

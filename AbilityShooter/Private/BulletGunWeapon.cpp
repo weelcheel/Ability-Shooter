@@ -140,19 +140,21 @@ void ABulletGunWeapon::FireWeapon()
 	const float coneHalfAngle = FMath::DegreesToRadians(currentSpread * 0.5f);
 
 	const FVector aimDir = GetAdjustedAim();
-	const FVector startTrace = GetCameraDamageStartLocation(aimDir);
+	const FVector startTrace = GetMuzzleLocation();
 	const FVector shootDir = weapRandom.VRandCone(aimDir, coneHalfAngle, coneHalfAngle);
 	const FVector endTrace = startTrace + shootDir * weaponConfig.weaponRange;
 
 	FHitResult impact = EquipmentTrace(startTrace, endTrace);
-	DrawDebugLine(GetWorld(), startTrace, endTrace, FColor::Cyan, true, 5.f, 0, 0.5f);
+	const FVector impactPoint = impact.ImpactPoint;
+	DrawDebugLine(GetWorld(), startTrace, impactPoint, FColor::Cyan, true, 5.f, 0, 0.5f);
+
 	if (impact.bBlockingHit)
 	{
-		const FVector origin = GetMuzzleLocation();
-		FHitResult newimpact = EquipmentTrace(origin, impact.Location);
-		DrawDebugLine(GetWorld(), origin, newimpact.Location, FColor::Red, true, 5.f, 0, 0.5f);
+		/*const FVector origin = GetMuzzleLocation();
+		FHitResult newimpact = EquipmentTrace(origin, impactPoint);
+		DrawDebugLine(GetWorld(), origin, newimpact.ImpactPoint, FColor::Red, true, 5.f, 0, 0.5f);*/
 
-		ProcessInstantHit(impact, origin, shootDir, randomSeed, currentSpread);
+		ProcessInstantHit(impact, startTrace, shootDir, randomSeed, currentSpread);
 	}
 
 	currentFiringSpread = FMath::Min(weaponConfig.firingSpreadMax, currentFiringSpread + weaponConfig.firingSpreadIncrement);
@@ -314,6 +316,10 @@ void ABulletGunWeapon::DealDamage(const FHitResult& Impact, const FVector& Shoot
 	PointDmg.HitInfo = Impact;
 	PointDmg.ShotDirection = ShootDir;
 	PointDmg.Damage = weaponConfig.hitDamage;
+
+	//add attack damage ratio if we have attack damage
+	if (IsValid(characterOwner) && characterOwner->GetCurrentStat(EStat::ES_Atk) > 0.f && weaponConfig.ammoPerClip > 0)
+		PointDmg.Damage += characterOwner->GetCurrentStat(EStat::ES_Atk) / weaponConfig.ammoPerClip;
 
 	Impact.GetActor()->TakeDamage(PointDmg.Damage, PointDmg, characterOwner->GetController(), this);
 }

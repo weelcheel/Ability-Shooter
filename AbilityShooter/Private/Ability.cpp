@@ -15,9 +15,16 @@ AAbility::AAbility()
 	bWantsToPerform = false;
 	bWantsToCooldown = false;
 	bHasAimingState = false;
+	bPerformingRotatesOwnerWithAim = true;
+	bStopPerformingWhenButtonIsReleased = false;
+	bIgnoreLookInputWhilePerforming = false;
+	bIgnoreMovementWhilePerforming = false;
 
 	bIsPerforming = false;
 	bIsAiming = false;
+
+	afterCooldownState = EAbilityState::Idle;
+	manualCooldownTime = -1.f;
 	
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PrePhysics;
@@ -37,6 +44,9 @@ void AAbility::StartPerform()
 	if (Role < ROLE_Authority)
 		ServerStartPerform();
 
+	if (HasAuthority() && currentState == EAbilityState::Performing)
+		HandleInterrupt(EAbilityInterruptSignal::UserCancelled);
+
 	if (!bWantsToPerform)
 	{
 		bWantsToPerform = true;
@@ -44,16 +54,22 @@ void AAbility::StartPerform()
 	}
 }
 
-void AAbility::StopPerform()
+void AAbility::StopPerform(bool bFromInput)
 {
+	if (bFromInput && !bStopPerformingWhenButtonIsReleased)
+	{
+		bWantsToPerform = false;
+		return;
+	}
+
 	if (Role < ROLE_Authority)
-		ServerStopPerform();
+		ServerStopPerform(bFromInput);
 
 	if (bWantsToPerform)
 	{
 		bWantsToPerform = false;
 		DetermineState();
-	}
+	}	
 }
 
 void AAbility::ConfirmAim()
@@ -68,6 +84,12 @@ void AAbility::ConfirmAim()
 	}
 }
 
+void AAbility::ForceStopAbility_Implementation()
+{
+	bWantsToPerform = false;
+	OnStopPerform();
+}
+
 bool AAbility::ServerStartPerform_Validate()
 {
 	return true;
@@ -78,14 +100,14 @@ void AAbility::ServerStartPerform_Implementation()
 	StartPerform();
 }
 
-bool AAbility::ServerStopPerform_Validate()
+bool AAbility::ServerStopPerform_Validate(bool bFromInput)
 {
 	return true;
 }
 
-void AAbility::ServerStopPerform_Implementation()
+void AAbility::ServerStopPerform_Implementation(bool bFromInput)
 {
-	StopPerform();
+	StopPerform(bFromInput);
 }
 
 bool AAbility::ServerHandlePerform_Validate()
@@ -108,28 +130,38 @@ void AAbility::ServerConfirmAim_Implementation()
 	ConfirmAim();
 }
 
+bool AAbility::ServerReceiveInterrupt_Validate(EAbilityInterruptSignal signal)
+{
+	return true;
+}
+
+void AAbility::ServerReceiveInterrupt_Implementation(EAbilityInterruptSignal signal)
+{
+	AbilityReceivedInterruptSignal(signal);
+}
+
+void AAbility::HandleInterrupt(EAbilityInterruptSignal signal)
+{
+	if (HasAuthority())
+		AbilityReceivedInterruptSignal(signal);
+	else
+		ServerReceiveInterrupt(signal);
+}
+
 void AAbility::HandlePerform()
 {
-	characterOwner->GetFollowCamera()->bUsePawnControlRotation = true;
-	characterOwner->bUseControllerRotationYaw = true;
-	characterOwner->GetCharacterMovement()->bOrientRotationToMovement = false;
-
 	if (CanPerform())
 	{
-		if (GetNetMode() != NM_DedicatedServer)
-			StartPerformEffects();
+		if (bIgnoreMovementWhilePerforming && IsValid(characterOwner))
+			characterOwner->GetCharacterMovement()->SetMovementMode(MOVE_None);
 
-		bIsPerforming = true;
-
-		if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
+		if (bAutoPerform)
 		{
-			if (executionTimeInfo.duration > 0.f)
-			{
-				ServerStartExecutionTimer();
-				GetWorldTimerManager().SetTimer(executionTimer, this, &AAbility::Perform, executionTimeInfo.duration);
-			}
-			else
-				Perform();
+			ContinueHandlePerform();
+		}
+		else
+		{
+			ShouldPerform();
 		}
 	}
 	else if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
@@ -144,19 +176,68 @@ void AAbility::HandlePerform()
 	}
 }
 
+void AAbility::ContinueHandlePerform()
+{
+	if (bPerformingRotatesOwnerWithAim)
+	{
+		characterOwner->GetFollowCamera()->bUsePawnControlRotation = true;
+		characterOwner->bUseControllerRotationYaw = true;
+		characterOwner->GetCharacterMovement()->bOrientRotationToMovement = false;
+	}
+
+	if (GetNetMode() != NM_DedicatedServer)
+		StartPerformEffects();
+
+	bIsPerforming = true;
+
+	if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
+	{
+		if (bIgnoreLookInputWhilePerforming && IsValid(characterOwner) && IsValid(characterOwner->GetController()))
+		{
+			APlayerController* pc = Cast<APlayerController>(characterOwner->GetController());
+			if (IsValid(pc))
+				pc->SetIgnoreLookInput(true);
+		}
+
+		if (executionTimeInfo.duration > 0.f)
+		{
+			ServerStartExecutionTimer();
+			GetWorldTimerManager().SetTimer(executionTimer, this, &AAbility::Perform, executionTimeInfo.duration);
+		}
+		else
+			Perform();
+	}
+}
+
 void AAbility::OnStopPerform()
 {
 	if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
 	{
-		characterOwner->GetFollowCamera()->bUsePawnControlRotation = false;
-		characterOwner->bUseControllerRotationYaw = false;
-		characterOwner->GetCharacterMovement()->bOrientRotationToMovement = true;
+		if (bIgnoreLookInputWhilePerforming && IsValid(characterOwner) && IsValid(characterOwner->GetController()))
+		{
+			APlayerController* pc = Cast<APlayerController>(characterOwner->GetController());
+			if (IsValid(pc))
+				pc->SetIgnoreLookInput(false);
+		}
+
+		if (bPerformingRotatesOwnerWithAim)
+		{
+			characterOwner->GetFollowCamera()->bUsePawnControlRotation = false;
+			characterOwner->bUseControllerRotationYaw = false;
+			characterOwner->GetCharacterMovement()->bOrientRotationToMovement = true;
+		}
 
 		OnAbilityStopped();
 	}
 
+	if (bIgnoreMovementWhilePerforming && IsValid(characterOwner))
+		characterOwner->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+
 	if (GetNetMode() != NM_DedicatedServer)
 		StopPerformEffects();
+
+	if (HasAuthority())
+		StartCooldown();
 
 	bIsPerforming = false;
 }
@@ -203,6 +284,15 @@ void AAbility::DetermineState()
 void AAbility::SetState(EAbilityState newState)
 {
 	const EAbilityState prevState = currentState;
+	currentState = newState;
+
+	if (prevState != EAbilityState::OnCooldown && newState == EAbilityState::OnCooldown)
+	{
+		bWantsToCooldown = false;
+		StartCooldownTimer();
+
+		return;
+	}
 
 	if (prevState == EAbilityState::Performing && newState != EAbilityState::Performing)
 		OnStopPerform();
@@ -212,8 +302,6 @@ void AAbility::SetState(EAbilityState newState)
 		OnAimingStopped();
 	}
 
-	currentState = newState;
-
 	if (prevState != EAbilityState::Performing && currentState == EAbilityState::Performing)
 		HandlePerform();
 	else if (prevState != EAbilityState::Aiming && currentState == EAbilityState::Aiming)
@@ -221,9 +309,6 @@ void AAbility::SetState(EAbilityState newState)
 		bIsAiming = true;
 		OnAimingStarted();
 	}
-
-	if (bWantsToCooldown && currentState == EAbilityState::OnCooldown)
-		bWantsToCooldown = false;
 }
 
 void AAbility::SetupAbility(AAbilityShooterCharacter* newOwner)
@@ -300,16 +385,20 @@ void AAbility::StartCooldown_Implementation(float manualCooldown /* = -1.f */, E
 {
 	bWantsToCooldown = true;
 	afterCooldownState = cdfState;
+	manualCooldownTime = manualCooldown;
 	DetermineState();
+}
 
+void AAbility::StartCooldownTimer()
+{
 	float duration;
-	if (manualCooldown == 0.f)
+	if (manualCooldownTime == 0.f)
 	{
 		currentState = afterCooldownState;
 		return;
 	}
 	else
-		duration = manualCooldown > 0.f ? manualCooldown : GetVeteranLevelScaledValue(baseCooldownTimes);
+		duration = manualCooldownTime > 0.f ? manualCooldownTime : GetVeteranLevelScaledValue(baseCooldownTimes);
 
 	//@TODO: let cooldown reduction modify duration
 	GetWorldTimerManager().SetTimer(cooldownTimer, this, &AAbility::CooldownFinished, duration);
@@ -318,6 +407,9 @@ void AAbility::StartCooldown_Implementation(float manualCooldown /* = -1.f */, E
 void AAbility::CooldownFinished()
 {
 	SetState(afterCooldownState);
+
+	afterCooldownState = EAbilityState::Idle;
+	manualCooldownTime = -1.f;
 }
 
 FHitResult AAbility::AbilityTrace(const FVector& from, const FVector& to) const
@@ -386,17 +478,17 @@ void AAbility::LaunchProjectile(const FName& originSocket, TSubclassOf<AProjecti
 	const float ProjectileAdjustRange = 10000.0f;
 	FVector EndTrace = camLoc + camRot.Vector() * ProjectileAdjustRange;
 
-	FHitResult Impact = AbilityTrace(camLoc, EndTrace);
+	//FHitResult Impact = AbilityTrace(camLoc, EndTrace);
 	FVector shootDir = GetAdjustedAim();
 
 	// and adjust directions to hit that actor
-	if (Impact.bBlockingHit)
+	/*if (Impact.bBlockingHit)
 	{
 		FHitResult newImpact = AbilityTrace(Origin, Impact.Location);
 		shootDir = (newImpact.Location - Origin).GetSafeNormal();
 		DrawDebugLine(GetWorld(), Origin, Origin + shootDir * 1000.f, FColor::Yellow, true, 5.f, 0, 0.8f);
 		DrawDebugLine(GetWorld(), Origin, newImpact.Location, FColor::Green, true, 5.f, 0, 0.5f);
-	}
+	}*/
 
 	ServerLaunchProjectile(Origin, shootDir, projectileType);
 }

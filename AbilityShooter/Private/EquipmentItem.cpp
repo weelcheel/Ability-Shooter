@@ -4,6 +4,7 @@
 #include "UnrealNetwork.h"
 #include "AbilityShooterCharacter.h"
 #include "Animation/AnimMontage.h"
+#include "Ability.h"
 
 AEquipmentItem::AEquipmentItem()
 {
@@ -28,6 +29,8 @@ AEquipmentItem::AEquipmentItem()
 
 	burstCounter = 0;
 	lastUseTime = 0.0f;
+
+	Tags.Add(TEXT("usable"));
 
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PrePhysics;
@@ -136,14 +139,22 @@ void AEquipmentItem::AttachMeshToCharacter()
 
 void AEquipmentItem::DetachMeshFromCharacter()
 {
-	FDetachmentTransformRules rules(EDetachmentRule::KeepRelative, false);
+	if (!IsValid(characterOwner))
+	{
+		FDetachmentTransformRules rules(EDetachmentRule::KeepWorld, false);
+		mesh->DetachFromComponent(rules);
 
-	mesh->DetachFromComponent(rules);
-	//mesh->SetHiddenInGame(true);
+		mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
+		mesh->SetSimulatePhysics(true);
+		mesh->WakeRigidBody();
+	}
+	else
+	{
+		FDetachmentTransformRules rules(EDetachmentRule::KeepRelative, false);
+		mesh->DetachFromComponent(rules);
 
-	mesh->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
-	mesh->SetSimulatePhysics(true);
-	mesh->WakeRigidBody();
+		mesh->SetHiddenInGame(true);
+	}
 }
 
 void AEquipmentItem::StartUse()
@@ -156,6 +167,9 @@ void AEquipmentItem::StartUse()
 		bWantsToUse = true;
 		DetermineEquipmentState();
 	}
+
+	if (HasAuthority() && IsValid(characterOwner))
+		characterOwner->SendInterruptToAbilities(EAbilityInterruptSignal::EquipementUsed);
 }
 
 void AEquipmentItem::StopUse()
@@ -172,15 +186,21 @@ void AEquipmentItem::StopUse()
 
 void AEquipmentItem::StartAlt()
 {
+	if (!IsValid(characterOwner))
+		return;
+
 	if (Role < ROLE_Authority)
 		ServerStartAlt();
 
-	if (!bWantsToAlt)
+	if (!bWantsToAlt && characterOwner->CanUseEquipment())
 	{
 		bWantsToAlt = true;
 		if (!bIsAltActive)
 			OnAltStarted();
 	}
+
+	if (HasAuthority() && IsValid(characterOwner))
+		characterOwner->SendInterruptToAbilities(EAbilityInterruptSignal::EquipementUsed);
 }
 
 void AEquipmentItem::StopAlt()

@@ -95,6 +95,8 @@ struct FCharacterActionInfo
 UCLASS(config=Game)
 class AAbilityShooterCharacter : public ACharacter
 {
+	friend class UStatsManager;
+
 	GENERATED_BODY()
 
 	/** Camera boom positioning the camera behind the character */
@@ -116,6 +118,10 @@ public:
 	float BaseLookUpRate;
 
 protected:
+
+	/* current usable object within our reach */
+	UPROPERTY(BlueprintReadOnly, Category = UseObject)
+	AActor* currentUseObject;
 
 	/** default inventory list */
 	UPROPERTY(EditDefaultsOnly, Category = Inventory)
@@ -174,11 +180,19 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = CharacterAction)
 	FCharacterActionInfo currentAction;
 
+	/* base stats for this character type */
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = Stats)
+	FBaseStats baseStats;
+
+	/* client movespeed that is updated by the server */
+	UPROPERTY()
+	float clientMoveSpeed;
+
 	/** spawn inventory, setup initial variables */
 	virtual void PostInitializeComponents() override;
 
 	/** Update the character. (Running, health etc). */
-	//virtual void Tick(float DeltaSeconds) override;
+	virtual void Tick(float DeltaSeconds) override;
 
 	/** cleanup inventory */
 	virtual void Destroyed() override;
@@ -260,12 +274,6 @@ protected:
 		OnStopAbility(Index);
 	}
 
-	/** handler for starting abilities */
-	void OnStartAbility(int32 abilityIndex);
-
-	/** handler for stopping abilities */
-	void OnStopAbility(int32 abilityIndex);
-
 	/* handler for trying to reload the current equipment */
 	void OnTryReload();
 
@@ -303,6 +311,9 @@ protected:
 	UFUNCTION()
 	void OnRep_Ailment();
 
+	UFUNCTION()
+	void OnRep_ClientMoveSpeed();
+
 	/** Called on the actor right before replication occurs */
 	virtual void PreReplication(IRepChangedPropertyTracker & ChangedPropertyTracker) override;
 
@@ -310,7 +321,19 @@ protected:
 	UFUNCTION(reliable, server, WithValidation)
 	void ServerEquipEquipment(AEquipmentItem* newEquipment);
 
+	/* server use object */
+	UFUNCTION(reliable, server, WithValidation)
+	void ServerUseCurrentObjectStarted(AActor* useObject);
+
+	/* server use object */
+	UFUNCTION(reliable, server, WithValidation)
+	void ServerUseCurrentObjectStopped(AActor* useObject);
+
 public:
+
+	/* current stats manager for this character (can be shared with the owning player controller) */
+	UPROPERTY(BlueprintReadOnly, Category = Stats)
+	UStatsManager* statsManager;
 
 	// Current health of the Shooter
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = Health)
@@ -389,8 +412,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Effect)
 	void EndEffect(UEffect* endingEffect);
 
+	/* [SERVER] ends and removes an effect that's currently affecting this character by key */
+	UFUNCTION(BlueprintCallable, Category = Effect)
+	void EndEffectByKey(UPARAM(ref) const FString& key);
+
 	/* force end an effect (useful for ending effects that aren't expired yet) */
-	UFUNCTION(reliable, NetMulticast)
+	UFUNCTION(BlueprintCallable, Category=Effect, reliable, NetMulticast)
 	void ForceEndEffect(const FString& key);
 
 	/* gets the current value (modified by effects) for a stat */
@@ -445,5 +472,15 @@ public:
 	/* get the max number of abilities this character can have */
 	UFUNCTION(BlueprintCallable, Category = Abilities)
 	int32 GetMaxAbilityCount() const;
+
+	/** handler for starting abilities */
+	void OnStartAbility(int32 abilityIndex);
+
+	/** handler for stopping abilities */
+	void OnStopAbility(int32 abilityIndex);
+
+	/* send an interrupt signal to all abilities that are being performed. let the ability decide what to do with the signal */
+	UFUNCTION(BlueprintCallable, Category = Abilities)
+	void SendInterruptToAbilities(EAbilityInterruptSignal signal);
 };
 

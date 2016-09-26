@@ -2,10 +2,12 @@
 
 #include "Quest.h"
 #include "GameFramework/PlayerInput.h"
+#include "AbilityShooterCharacter.h"
 #include "AbilityShooterPlayerController.generated.h"
 
 struct FEffectInitInfo;
 class AAbility;
+class UStatsManager;
 
 UCLASS()
 class AAbilityShooterPlayerController : public APlayerController
@@ -18,12 +20,20 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category=Quests, replicated)
 	TArray<UQuest*> quests;
 
+	/* stat manager for this player to use across characters */
+	UPROPERTY()
+	UStatsManager* statsManager;
+
 	/* handles restarting the player on a respawn */
 	void HandleRespawnTimer();
 
 	virtual bool ReplicateSubobjects(class UActorChannel *Channel, class FOutBunch *Bunch, FReplicationFlags *RepFlags) override;
 
 public:
+
+	/* gets the currently controlled pawn casted to an ability character */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Interp, Category = Character)
+	AAbilityShooterCharacter* currentCharacter;
 
 	/* caches the persisting effects the player has to apply to the new character on spawn */
 	TArray<FEffectInitInfo> persistentEffects;
@@ -63,4 +73,7 @@ public:
 	/* gets the key mappings for an input action name */
 	UFUNCTION(BlueprintCallable, Category = Bindings)
 	void GetKeysForAction(FName actionName, TArray<FInputActionKeyMapping>& bindings);
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Pawn", meta = (Keywords = "set controller"))
+	virtual void Possess(APawn* InPawn) override;
 };

@@ -96,6 +96,7 @@ UCLASS(config=Game)
 class AAbilityShooterCharacter : public ACharacter
 {
 	friend class UStatsManager;
+	friend class AAbility;
 
 	GENERATED_BODY()
 
@@ -166,7 +167,7 @@ protected:
 	TArray<UEffect*> currentEffects;
 
 	/* current ailment (if any) affecting this Shooter */
-	UPROPERTY(ReplicatedUsing = OnRep_Ailment)
+	UPROPERTY()
 	FAilmentInfo currentAilment;
 
 	/* array of ailments that need to be inflicted to the character (if there is an ailment currently being processed) */
@@ -308,8 +309,8 @@ protected:
 	void OnRep_CurrentEquipment(AEquipmentItem* lastEquipment);
 
 	/* notify the client of Ailment */
-	UFUNCTION()
-	void OnRep_Ailment();
+	//UFUNCTION()
+	//void OnRep_Ailment();
 
 	UFUNCTION()
 	void OnRep_ClientMoveSpeed();
@@ -425,8 +426,8 @@ public:
 	float GetCurrentStat(EStat stat) const;
 
 	/* called whenever something tries to give this character an Ailment */
-	UFUNCTION(BlueprintCallable, Category = CC)
-	void ApplyAilment(UPARAM(ref) const FAilmentInfo& info);
+	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = CC)
+	void ApplyAilment(const FAilmentInfo& info);
 
 	/* called whenever something tries to end this character's current Ailment */
 	UFUNCTION(BlueprintCallable, Category = CC)

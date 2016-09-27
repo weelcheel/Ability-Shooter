@@ -4,6 +4,8 @@
 #include "DrawDebugHelpers.h"
 #include "EquipmentItem.h"
 #include "UnrealNetwork.h"
+#include "AbilityShooterGameMode.h"
+#include "ASPlayerState.h"
 
 AAbility::AAbility()
 {
@@ -155,6 +157,24 @@ void AAbility::HandlePerform()
 		if (bIgnoreMovementWhilePerforming && IsValid(characterOwner))
 			characterOwner->GetCharacterMovement()->SetMovementMode(MOVE_None);
 
+		if (bShouldStopAllOtherAbilitiesOnUse && IsValid(characterOwner) && HasAuthority())
+		{
+			for (AAbility* ability : characterOwner->abilities)
+			{
+				if ((ability->GetCurrentState() == EAbilityState::Performing || ability->GetCurrentState() == EAbilityState::Aiming) && ability != this)
+					ability->ForceStopAbility();
+			}
+		}
+
+		if (bShouldDisableAllOtherAbilitiesOnUse && IsValid(characterOwner) && HasAuthority())
+		{
+			for (AAbility* ability : characterOwner->abilities)
+			{
+				if (ability != this)
+					ability->SetDisabled(true);
+			}
+		}
+
 		if (bAutoPerform)
 		{
 			ContinueHandlePerform();
@@ -239,6 +259,15 @@ void AAbility::OnStopPerform()
 	if (HasAuthority())
 		StartCooldown();
 
+	if (bShouldDisableAllOtherAbilitiesOnUse && IsValid(characterOwner) && HasAuthority())
+	{
+		for (AAbility* ability : characterOwner->abilities)
+		{
+			if (ability != this)
+				ability->SetDisabled(false);
+		}
+	}
+
 	bIsPerforming = false;
 }
 
@@ -246,7 +275,9 @@ void AAbility::DetermineState()
 {
 	EAbilityState newState = EAbilityState::Idle;
 
-	if (currentState == EAbilityState::OnCooldown || bWantsToCooldown)
+	if (currentState == EAbilityState::Disabled)
+		newState = EAbilityState::Disabled;
+	else if (currentState == EAbilityState::OnCooldown || bWantsToCooldown || GetWorldTimerManager().GetTimerRemaining(cooldownTimer) > 0.f)
 		newState = EAbilityState::OnCooldown;
 	else if (currentState == EAbilityState::Disabled)
 		newState = EAbilityState::Disabled;
@@ -335,6 +366,19 @@ void AAbility::SetupAbility(AAbilityShooterCharacter* newOwner)
 	DetermineState();
 }
 
+void AAbility::SetDisabled(bool bDisabled /* = false */)
+{
+	if (bDisabled)
+	{
+		SetState(EAbilityState::Disabled);
+	}
+	else
+	{
+		SetState(EAbilityState::Idle);
+		DetermineState();
+	}
+}
+
 void AAbility::AddVeteranLevel()
 {
 	if (Role < ROLE_Authority)
@@ -406,7 +450,8 @@ void AAbility::StartCooldownTimer()
 
 void AAbility::CooldownFinished()
 {
-	SetState(afterCooldownState);
+	if (currentState != EAbilityState::Disabled && currentState != EAbilityState::NoOwner)
+		SetState(afterCooldownState);
 
 	afterCooldownState = EAbilityState::Idle;
 	manualCooldownTime = -1.f;
@@ -564,6 +609,18 @@ void AAbility::OnRep_IsAiming()
 		OnAimingStarted();
 	else
 		OnAimingStopped();
+}
+
+bool AAbility::CanHurtCharacter(AAbilityShooterCharacter* testCharacter) const
+{
+	AAbilityShooterGameMode* gm = GetWorld()->GetAuthGameMode<AAbilityShooterGameMode>();
+
+	if (!IsValid(characterOwner) || !IsValid(testCharacter))
+		return false;
+	if (!testCharacter->IsAlive())
+		return false;
+	
+	return IsValid(gm) ? gm->CanDealDamage(Cast<AASPlayerState>(characterOwner->PlayerState), Cast<AASPlayerState>(testCharacter->PlayerState)) : false;
 }
 
 void AAbility::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const

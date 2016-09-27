@@ -989,20 +989,37 @@ float AAbilityShooterCharacter::GetCurrentStat(EStat stat) const
 	return statDelta;
 }
 
-void AAbilityShooterCharacter::OnRep_Ailment()
+/*void AAbilityShooterCharacter::OnRep_Ailment()
 {
+	APlayerController* pc = Cast<APlayerController>(GetController());
+
+	switch (currentAilment.type)
+	{
+	case EAilment::AL_None:
+		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+		if (IsValid(pc))
+			pc->SetIgnoreMoveInput(false);
+		break;
+	case EAilment::AL_Knockup: //a knockup is a stun that displaces the character a certain distance.
+		GetCharacterMovement()->Velocity += currentAilment.dir;
+		if (IsValid(pc))
+			pc->SetIgnoreMoveInput(true);
+		break;
+	case EAilment::AL_Stun:
+		GetCharacterMovement()->DisableMovement();
+		break;
+	}
+
 	if (currentAilment.duration > 0.f)
+	{
 		GetWorldTimerManager().SetTimer(ailmentTimer, currentAilment.duration, false);
+	}
 	else
 		GetWorldTimerManager().ClearTimer(ailmentTimer);
-}
+}*/
 
-void AAbilityShooterCharacter::ApplyAilment(const FAilmentInfo& info)
+void AAbilityShooterCharacter::ApplyAilment_Implementation(const FAilmentInfo& info)
 {
-	//only run on the server
-	if (Role < ROLE_Authority)
-		return;
-
 	if (currentAilment.type != EAilment::AL_None)
 	{
 		ailmentQueue.Enqueue(info);
@@ -1010,14 +1027,19 @@ void AAbilityShooterCharacter::ApplyAilment(const FAilmentInfo& info)
 	}
 
 	currentAilment = info;
+	APlayerController* pc = Cast<APlayerController>(GetController());
 
 	switch (currentAilment.type)
 	{
 	case EAilment::AL_None:
 		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+		if (IsValid(pc))
+			pc->SetIgnoreMoveInput(false);
 		break;
 	case EAilment::AL_Knockup: //a knockup is a stun that displaces the character a certain distance.
-		GetCapsuleComponent()->AddImpulse(currentAilment.dir);
+		GetCharacterMovement()->Launch(info.dir);
+		if (IsValid(pc))
+			pc->SetIgnoreMoveInput(true);
 		break;
 	case EAilment::AL_Stun:
 		GetCharacterMovement()->DisableMovement();
@@ -1174,7 +1196,7 @@ void AAbilityShooterCharacter::GetLifetimeReplicatedProps(TArray< FLifetimePrope
 
 	// only to local owner: weapon change requests are locally instigated, other clients don't need it
 	DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, equipmentInventory, COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, abilities, COND_OwnerOnly);
+	//DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, abilities, COND_OwnerOnly);
 
 	// everyone except local owner: flag change is locally instigated
 	//DOREPLIFETIME_CONDITION(AAbilityShooterCharacter, bIsTargeting, COND_SkipOwner);
@@ -1185,6 +1207,7 @@ void AAbilityShooterCharacter::GetLifetimeReplicatedProps(TArray< FLifetimePrope
 	// everyone
 	DOREPLIFETIME(AAbilityShooterCharacter, currentEquipment);
 	DOREPLIFETIME(AAbilityShooterCharacter, health);
-	DOREPLIFETIME(AAbilityShooterCharacter, currentAilment);
+	//DOREPLIFETIME(AAbilityShooterCharacter, currentAilment); 
+	DOREPLIFETIME(AAbilityShooterCharacter, abilities);
 	//DOREPLIFETIME(AAbilityShooterCharacter, clientMoveSpeed);
 }

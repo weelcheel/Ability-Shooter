@@ -80,6 +80,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = Ability)
 	bool bIgnoreMovementWhilePerforming;
 
+	/* whether or not this ability stops all other abilities on use */
+	UPROPERTY(EditDefaultsOnly, Category = Ability)
+	bool bShouldStopAllOtherAbilitiesOnUse;
+
+	/* whether or not this ability disables all other abilities on use */
+	UPROPERTY(EditDefaultsOnly, Category = Ability)
+	bool bShouldDisableAllOtherAbilitiesOnUse;
+
 	/* replicated boolean to give performing effects */
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_IsPerforming)
 	bool bIsPerforming;
@@ -204,6 +212,10 @@ protected:
 	UFUNCTION(reliable, server, WithValidation, BlueprintCallable, Category = CharacterAction)
 	void ServerStartExecutionTimer();
 
+	/* whether or not this ability can deal damage to a certain character */
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	bool CanHurtCharacter(AAbilityShooterCharacter* testCharacter) const;
+
 	UFUNCTION()
 	void OnRep_CharacterOwner();
 
@@ -271,6 +283,10 @@ public:
 	/* force this ability to stop performing on all clients and server */
 	UFUNCTION(NetMulticast, reliable, BlueprintCallable, Category = Ability)
 	void ForceStopAbility();
+
+	/* set whether or not this ability is disabeld */
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	void SetDisabled(bool bDisabled = false);
 
 	/* gets the Ability state */
 	UFUNCTION(BlueprintCallable, Category = Ability)

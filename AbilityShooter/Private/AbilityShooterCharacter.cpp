@@ -1179,6 +1179,35 @@ void AAbilityShooterCharacter::SendInterruptToAbilities(EAbilityInterruptSignal 
 	}
 }
 
+int32 AAbilityShooterCharacter::GetEffectStacks(const FString& key) const
+{
+	for (UEffect* effect : currentEffects)
+	{
+		if (IsValid(effect) && effect->GetKey() == key)
+			return effect->GetStacks();
+	}
+
+	return -1;
+}
+
+void AAbilityShooterCharacter::AddEffectStacks_Implementation(const FString& key, int32 deltaAmt)
+{
+	for (UEffect* effect : currentEffects)
+	{
+		if (IsValid(effect) && effect->GetKey() == key)
+			effect->AddStacks(deltaAmt);
+	}
+}
+
+void AAbilityShooterCharacter::SetEffectStacks_Implementation(const FString& key, int32 newAmt)
+{
+	for (UEffect* effect : currentEffects)
+	{
+		if (IsValid(effect) && effect->GetKey() == key)
+			effect->SetStacks(newAmt);
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////
 // Replication
 

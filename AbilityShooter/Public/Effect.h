@@ -46,8 +46,14 @@ protected:
 	UPROPERTY()
 	float duration;
 
+	/* number of stacks that this effect has (if it counts stacks) */
+	int32 stacks;
+
 	/* whether or not this effect persists through death */
 	bool bPersistThruDeath;
+
+	/* whether or not this effect has stacks */
+	bool bHasStacks;
 
 	/* stats this effect alters */
 	UPROPERTY()
@@ -103,6 +109,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Effect)
 	FString GetKey() const;
 
+	/* gets whether or not this effect stacks*/
+	UFUNCTION(BlueprintCallable, Category = Effect)
+	bool DoesStack() const;
+
+	/* get the number of stacks this effect has */
+	UFUNCTION(BlueprintCallable, Category = Effect)
+	int32 GetStacks() const;
+
+	/* add a number of stacks */
+	UFUNCTION(BlueprintCallable, Category = Effect)
+	void AddStacks(int32 deltaAmt);
+
+	/* add a number of stacks */
+	UFUNCTION(BlueprintCallable, Category = Effect)
+	void SetStacks(int32 newAmt);
+
 	//--- ---
 
 	/* called to initialize this effect from init info */
@@ -137,6 +159,14 @@ struct FEffectInitInfo
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = EffectInfo)
 	bool bDoesPersistThruDeath;
 
+	/* whether or not this effect keeps track of stack counts */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = EffectInfo)
+	bool bShouldStack;
+
+	/* number of stacks this effect starts with */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = EffectInfo)
+	int32 startStacks;
+
 	/* what class of effect to apply */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = EffectInfo)
 	TSubclassOf<UEffect> effectType;
@@ -158,7 +188,9 @@ struct FEffectInitInfo
 		persistentKey = "";
 		duration = -1.f;
 		bDoesPersistThruDeath = false;
+		bShouldStack = false;
 		effectType = UEffect::StaticClass();
 		persistentTime = -1.f;
+		startStacks = 0;
 	}
 };

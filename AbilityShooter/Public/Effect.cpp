@@ -54,6 +54,12 @@ void UEffect::Initialize(const FEffectInitInfo& initInfo, AAbilityShooterCharact
 
 	if (initInfo.persistentKey != "")
 		key = initInfo.persistentKey;
+
+	if (initInfo.bShouldStack)
+	{
+		bHasStacks = true;
+		stacks = initInfo.startStacks;
+	}
 	
 	bEffectInitialized = true;
 }
@@ -68,4 +74,26 @@ void UEffect::OnEffectExpired()
 {
 	if (IsValid(appliedCharacter))
 		appliedCharacter->EndEffect(this);
+}
+
+bool UEffect::DoesStack() const
+{
+	return bHasStacks;
+}
+
+int32 UEffect::GetStacks() const
+{
+	return bHasStacks ? stacks : 0;
+}
+
+void UEffect::AddStacks(int32 deltaAmt)
+{
+	if (bHasStacks)
+		stacks += deltaAmt;
+}
+
+void UEffect::SetStacks(int32 newAmt)
+{
+	if (bHasStacks)
+		stacks = newAmt;
 }

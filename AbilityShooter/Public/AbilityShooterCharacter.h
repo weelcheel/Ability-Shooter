@@ -483,5 +483,17 @@ public:
 	/* send an interrupt signal to all abilities that are being performed. let the ability decide what to do with the signal */
 	UFUNCTION(BlueprintCallable, Category = Abilities)
 	void SendInterruptToAbilities(EAbilityInterruptSignal signal);
+
+	/* get the stacks of an effect */
+	UFUNCTION(BlueprintCallable, Category = Abilities)
+	int32 GetEffectStacks(UPARAM(ref) const FString& key) const;
+
+	/* (must be called on server) add to stacks of an effect */
+	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Abilities)
+	void AddEffectStacks(const FString& key, int32 deltaAmt);
+
+	/* (must be called on server) add to stacks of an effect */
+	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Abilities)
+	void SetEffectStacks(const FString& key, int32 newAmt);
 };
 

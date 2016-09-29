@@ -90,6 +90,12 @@ void AAbility::ForceStopAbility_Implementation()
 {
 	bWantsToPerform = false;
 	OnStopPerform();
+
+	if (GetWorldTimerManager().GetTimerRemaining(executionTimer) > 0.f && IsValid(characterOwner))
+	{
+		characterOwner->ForceEndCurrentAction();
+		GetWorldTimerManager().ClearTimer(executionTimer);
+	}
 }
 
 bool AAbility::ServerStartPerform_Validate()

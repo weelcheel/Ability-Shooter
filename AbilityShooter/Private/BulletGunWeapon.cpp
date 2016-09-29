@@ -43,7 +43,17 @@ void ABulletGunWeapon::StartReload(bool bFromReplication /* = false */)
 
 		//GetWorldTimerManager().SetTimer(stopReloadTimer, this, &ABulletGunWeapon::StopReload, animDuration, false);
 		//if (Role == ROLE_Authority)
-		GetWorldTimerManager().SetTimer(reloadTimer, this, &ABulletGunWeapon::ReloadWeapon, FMath::Max(0.1f, animDuration - 0.1f), false);
+		float reloadDuration = FMath::Max(0.1f, animDuration - 0.1f);
+		GetWorldTimerManager().SetTimer(reloadTimer, this, &ABulletGunWeapon::ReloadWeapon, reloadDuration, false);
+
+		if (HasAuthority() && IsValid(characterOwner))
+		{
+			FCharacterActionInfo reloadAction;
+			reloadAction.duration = reloadDuration;
+			reloadAction.title = NSLOCTEXT("weapons", "bulletweaponreload", "Reloading");
+
+			characterOwner->AllApplyAction(reloadAction);
+		}
 
 		if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
 			PlayEquipmentSound(reloadSound);

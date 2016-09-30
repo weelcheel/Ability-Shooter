@@ -4,6 +4,14 @@
 #include "Sound/SoundCue.h"
 #include "Effect.h"
 #include "CharacterAction.h"
+
+#include "Runtime/UMG/Public/UMG.h"
+#include "Runtime/UMG/Public/UMGStyle.h"
+#include "Runtime/UMG/Public/Slate/SObjectWidget.h"
+#include "Runtime/UMG/Public/IUMGModule.h"
+#include "Runtime/UMG/Public/Blueprint/UserWidget.h"
+#include "Components/WidgetComponent.h"
+
 #include "AbilityShooterCharacter.generated.h"
 
 class AEquipmentItem;
@@ -107,6 +115,15 @@ class AAbilityShooterCharacter : public ACharacter
 	/** Follow camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	class UCameraComponent* FollowCamera;
+
+	/* widget component for above head character info */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = UI, meta = (AllowPrivateAccess = "true"))
+	UWidgetComponent* aboveHeadWidget;
+
+	/* template widget class for the aboveHeadWidget */
+	UPROPERTY(EditDefaultsOnly, Category = UI)
+	TSubclassOf<UUserWidget> aboveHeadWidgetClass;
+
 public:
 	AAbilityShooterCharacter();
 

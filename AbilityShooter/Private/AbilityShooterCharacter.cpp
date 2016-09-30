@@ -63,6 +63,11 @@ AAbilityShooterCharacter::AAbilityShooterCharacter()
 	
 	health = 100.f;
 	maxAbilityCount = 7;
+
+	aboveHeadWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("aboveHeadUI"));
+	aboveHeadWidget->SetupAttachment(RootComponent, TEXT("hpbar"));
+	aboveHeadWidget->SetWidgetClass(aboveHeadWidgetClass);
+	aboveHeadWidget->SetDrawSize(FVector2D(0.f, 0.f));
 }
 
 void AAbilityShooterCharacter::PostInitializeComponents()
@@ -100,6 +105,8 @@ void AAbilityShooterCharacter::PawnClientRestart()
 
 	//reattach equipment if needed
 	SetCurrentEquipment(currentEquipment);
+
+	health = GetMaxHealth();
 
 	//@TODO: set mesh team color material instance
 }
@@ -846,8 +853,7 @@ void AAbilityShooterCharacter::SetCurrentEquipment(AEquipmentItem* newEquipment,
 
 float AAbilityShooterCharacter::GetMaxHealth() const
 {
-	//@TODO: get the max HP from the Shooter's stats
-	return 100.f;
+	return GetCurrentStat(EStat::ES_HP);
 }
 
 float AAbilityShooterCharacter::GetADSWeaponSpread() const

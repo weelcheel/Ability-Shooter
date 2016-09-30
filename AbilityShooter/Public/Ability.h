@@ -132,6 +132,10 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void ContinueHandlePerform();
 
+	/* the ability failed the ShouldPerform test, so send it back to the idle state */
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	void StopHandlePerform();
+
 	/* if the ability can't auto perform, then determine if it should perform at all */
 	UFUNCTION(BlueprintImplementableEvent, Category = Ability)
 	void ShouldPerform();
@@ -183,7 +187,7 @@ protected:
 	void HandlePerform();
 
 	/* on stop performing */
-	void OnStopPerform();
+	void OnStopPerform(bool bFromPerforming = true);
 
 	/* actually sets the cooldown timer for this ability */
 	void StartCooldownTimer();

@@ -44,10 +44,12 @@ bool AAbility::CanPerform() const
 void AAbility::StartPerform()
 {
 	if (Role < ROLE_Authority)
+	{
 		ServerStartPerform();
 
-	if (HasAuthority() && currentState == EAbilityState::Performing)
-		HandleInterrupt(EAbilityInterruptSignal::UserCancelled);
+		if (currentState == EAbilityState::Performing)
+			HandleInterrupt(EAbilityInterruptSignal::UserCancelled);
+	}
 
 	if (!bWantsToPerform)
 	{
@@ -160,39 +162,16 @@ void AAbility::HandlePerform()
 {
 	if (CanPerform())
 	{
-		if (bIgnoreMovementWhilePerforming && IsValid(characterOwner))
-			characterOwner->GetCharacterMovement()->SetMovementMode(MOVE_None);
-
-		if (bShouldStopAllOtherAbilitiesOnUse && IsValid(characterOwner) && HasAuthority())
-		{
-			for (AAbility* ability : characterOwner->abilities)
-			{
-				if ((ability->GetCurrentState() == EAbilityState::Performing || ability->GetCurrentState() == EAbilityState::Aiming) && ability != this)
-					ability->ForceStopAbility();
-			}
-		}
-
-		if (bShouldDisableAllOtherAbilitiesOnUse && IsValid(characterOwner) && HasAuthority())
-		{
-			for (AAbility* ability : characterOwner->abilities)
-			{
-				if (ability != this)
-					ability->SetDisabled(true);
-			}
-		}
-
-		if (bAutoPerform)
-		{
-			ContinueHandlePerform();
-		}
-		else
+		if (!bAutoPerform)
 		{
 			ShouldPerform();
 		}
+		else
+			ContinueHandlePerform();
 	}
 	else if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
 	{
-		OnStopPerform();
+		OnStopPerform(false);
 	}
 
 	if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
@@ -204,6 +183,27 @@ void AAbility::HandlePerform()
 
 void AAbility::ContinueHandlePerform()
 {
+	if (bIgnoreMovementWhilePerforming && IsValid(characterOwner))
+		characterOwner->GetCharacterMovement()->SetMovementMode(MOVE_None);
+
+	if (bShouldStopAllOtherAbilitiesOnUse && IsValid(characterOwner) && HasAuthority())
+	{
+		for (AAbility* ability : characterOwner->abilities)
+		{
+			if ((ability->GetCurrentState() == EAbilityState::Performing || ability->GetCurrentState() == EAbilityState::Aiming) && ability != this)
+				ability->ForceStopAbility();
+		}
+	}
+
+	if (bShouldDisableAllOtherAbilitiesOnUse && IsValid(characterOwner) && HasAuthority())
+	{
+		for (AAbility* ability : characterOwner->abilities)
+		{
+			if (ability != this)
+				ability->SetDisabled(true);
+		}
+	}
+
 	if (bPerformingRotatesOwnerWithAim)
 	{
 		characterOwner->GetFollowCamera()->bUsePawnControlRotation = true;
@@ -235,8 +235,20 @@ void AAbility::ContinueHandlePerform()
 	}
 }
 
-void AAbility::OnStopPerform()
+void AAbility::StopHandlePerform()
 {
+	OnStopPerform(false);
+	currentState = EAbilityState::Idle;
+}
+
+void AAbility::OnStopPerform(bool bFromPerforming)
+{
+	if (!bFromPerforming) //if we performed before this or if the ability is just failing to start
+	{
+		bIsPerforming = false;
+		return;
+	}
+
 	if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
 	{
 		if (bIgnoreLookInputWhilePerforming && IsValid(characterOwner) && IsValid(characterOwner->GetController()))

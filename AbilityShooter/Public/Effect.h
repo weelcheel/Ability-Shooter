@@ -18,6 +18,13 @@ struct FEffectStatAlter
 	/* how much to alter the stat */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = EffectStat)
 	float deltaStat;
+
+	/* how much to alter the stat (unaffected by stacks) */
+	float baseDeltaStat;
+
+	/* whether or not this stat alter is multiplied by effect stacks */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = EffectStat)
+	bool bShouldMultiplyWithStacks;
 };
 
 UCLASS(Blueprintable)

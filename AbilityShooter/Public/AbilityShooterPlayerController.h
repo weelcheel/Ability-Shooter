@@ -3,6 +3,7 @@
 #include "Quest.h"
 #include "GameFramework/PlayerInput.h"
 #include "AbilityShooterCharacter.h"
+#include "StoreItem.h"
 #include "AbilityShooterPlayerController.generated.h"
 
 struct FEffectInitInfo;
@@ -30,6 +31,7 @@ protected:
 	virtual bool ReplicateSubobjects(class UActorChannel *Channel, class FOutBunch *Bunch, FReplicationFlags *RepFlags) override;
 
 public:
+	AAbilityShooterPlayerController();
 
 	/* gets the currently controlled pawn casted to an ability character */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Interp, Category = Character)
@@ -41,7 +43,9 @@ public:
 	/* caches the abilites the player has to give to the new character on spawn */
 	TArray<AAbility*> persistentAbilities;
 
-	AAbilityShooterPlayerController();
+	/* list of store items set by the game mode to sell to the player */
+	UPROPERTY(BlueprintReadOnly, replicated, Category = IngameStore)
+	TArray<FStoreItem> storeItems;
 
 	/* server function that starts the respawn timer for this player */
 	void SetRespawnTimer(float respawnTime);

@@ -545,6 +545,13 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FDamageEvent const &
 				PC->ClientPlayForceFeedback(DamageType->KilledForceFeedback, false, "Damage");
 			}*/
 		}
+
+		//end all abilities that are being performed right now
+		for (AAbility* ability : abilities)
+		{
+			if (ability->GetCurrentState() == EAbilityState::Performing)
+				ability->ForceStopAbility();
+		}
 	}
 
 	//end all effects currently effecting that don't persist through death, and save the ones that do
@@ -1081,7 +1088,7 @@ void AAbilityShooterCharacter::EndCurrentAilment()
 bool AAbilityShooterCharacter::ShouldQuickAimAbilities() const
 {
 	//@DEBUG: testing right now, eventually read a setting from the player
-	return false;
+	return true;
 }
 
 void AAbilityShooterCharacter::ApplyLatentAction(FCharacterActionInfo actionInfo, FLatentActionInfo latentInfo)
@@ -1106,7 +1113,7 @@ void AAbilityShooterCharacter::AllApplyAction_Implementation(const FCharacterAct
 	GetWorldTimerManager().SetTimer(currentAction.timer, currentAction.duration, false);
 }
 
-void AAbilityShooterCharacter::ForceEndCurrentAction()
+void AAbilityShooterCharacter::ForceEndCurrentAction_Implementation()
 {
 	if (GetWorldTimerManager().GetTimerRemaining(currentAction.timer) > 0.f)
 	{
@@ -1196,21 +1203,29 @@ int32 AAbilityShooterCharacter::GetEffectStacks(const FString& key) const
 	return -1;
 }
 
-void AAbilityShooterCharacter::AddEffectStacks_Implementation(const FString& key, int32 deltaAmt)
+void AAbilityShooterCharacter::AddEffectStacks_Implementation(const FString& key, int32 deltaAmt, bool bShouldResetEffectTimer)
 {
 	for (UEffect* effect : currentEffects)
 	{
 		if (IsValid(effect) && effect->GetKey() == key)
+		{
 			effect->AddStacks(deltaAmt);
+			if (bShouldResetEffectTimer)
+				effect->SetExpirationTimer();
+		}
 	}
 }
 
-void AAbilityShooterCharacter::SetEffectStacks_Implementation(const FString& key, int32 newAmt)
+void AAbilityShooterCharacter::SetEffectStacks_Implementation(const FString& key, int32 newAmt, bool bShouldResetEffectTimer)
 {
 	for (UEffect* effect : currentEffects)
 	{
 		if (IsValid(effect) && effect->GetKey() == key)
+		{
 			effect->SetStacks(newAmt);
+			if (bShouldResetEffectTimer)
+				effect->SetExpirationTimer();
+		}
 	}
 }
 

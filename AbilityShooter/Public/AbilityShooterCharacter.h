@@ -477,11 +477,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = CharacterAction, meta = (Latent, LatentInfo = "latentInfo"))
 	void ApplyLatentAction(FCharacterActionInfo actionInfo, FLatentActionInfo latentInfo);
 
-	/* net multicast functio to broadcast to all clients about an action */
-	UFUNCTION(reliable, NetMulticast)
+	/* net multicast function to broadcast to all clients about an action */
+	UFUNCTION(reliable, NetMulticast, BlueprintCallable, Category=Action)
 	void AllApplyAction(const FCharacterActionInfo& newAction);
 
 	/* forcibly end the current action */
+	UFUNCTION(reliable, NetMulticast, BlueprintCallable, Category = Action)
 	void ForceEndCurrentAction();
 
 	/* get casted player state */
@@ -507,10 +508,10 @@ public:
 
 	/* (must be called on server) add to stacks of an effect */
 	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Abilities)
-	void AddEffectStacks(const FString& key, int32 deltaAmt);
+	void AddEffectStacks(const FString& key, int32 deltaAmt, bool bShouldResetEffectTimer = true);
 
 	/* (must be called on server) add to stacks of an effect */
 	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Abilities)
-	void SetEffectStacks(const FString& key, int32 newAmt);
+	void SetEffectStacks(const FString& key, int32 newAmt, bool bShouldResetEffectTimer = true);
 };
 

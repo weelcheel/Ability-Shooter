@@ -64,7 +64,7 @@ void AProjectile::OnImpact(const FHitResult& hitResult)
 		if (!projConfig.bExplodeOnAnyImpact)
 		{
 			AAbilityShooterCharacter* character = Cast<AAbilityShooterCharacter>(hitResult.GetActor());
-			if (!IsValid(character))
+			if (!IsValid(character) || hitResult.GetActor() == Instigator)
 				return;
 		}
 
@@ -83,8 +83,14 @@ void AProjectile::Explode(const FHitResult& impact)
 	// effects and damage origin shouldn't be placed inside mesh at impact point
 	const FVector nudgedImpactLocation = impact.ImpactPoint + impact.ImpactNormal * 10.0f;
 
-	if (projConfig.explosionDamage > 0.f && projConfig.explosionRadius > 0.f && IsValid(projConfig.damageType))
-		UGameplayStatics::ApplyRadialDamage(this, projConfig.explosionDamage, nudgedImpactLocation, projConfig.explosionRadius, projConfig.damageType, TArray<AActor*>(), this, controller);
+	if (projConfig.explosionDamage > 0.f && IsValid(projConfig.damageType))
+	{
+		if (projConfig.explosionRadius > 0.f)
+			UGameplayStatics::ApplyRadialDamage(this, projConfig.explosionDamage, nudgedImpactLocation, projConfig.explosionRadius, projConfig.damageType, TArray<AActor*>(), this, controller);
+		else
+			UGameplayStatics::ApplyDamage(impact.GetActor(), projConfig.explosionDamage, controller, this, projConfig.damageType);
+	}
+		
 
 	if (IsValid(explosionTemplate))
 	{
@@ -108,7 +114,7 @@ void AProjectile::DisableAndDestroy()
 
 	movement->StopMovementImmediately();
 
-	SetLifeSpan(2.f);
+	SetLifeSpan(0.2f);
 }
 
 void AProjectile::OnRep_Exploded()

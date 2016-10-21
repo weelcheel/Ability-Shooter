@@ -184,4 +184,5 @@ void AAbilityShooterPlayerController::GetLifetimeReplicatedProps(TArray< FLifeti
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(AAbilityShooterPlayerController, quests);
+	DOREPLIFETIME_CONDITION(AAbilityShooterPlayerController, storeItems, COND_OwnerOnly);
 }

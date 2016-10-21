@@ -48,7 +48,11 @@ void UEffect::Initialize(const FEffectInitInfo& initInfo, AAbilityShooterCharact
 	description = initInfo.description;
 	duration = initInfo.duration;
 	appliedCharacter = characterOwner;
+
 	statAlters = initInfo.statAlters;
+	for (int32 i = 0; i < statAlters.Num(); i++)
+		statAlters[i].baseDeltaStat = statAlters[i].deltaStat;
+
 	bPersistThruDeath = initInfo.bDoesPersistThruDeath;
 	expirationTimer = initInfo.persistentTimer;
 
@@ -89,11 +93,25 @@ int32 UEffect::GetStacks() const
 void UEffect::AddStacks(int32 deltaAmt)
 {
 	if (bHasStacks)
+	{
 		stacks += deltaAmt;
+		for (int32 i = 0; i < statAlters.Num(); i++)
+		{
+			if (statAlters[i].bShouldMultiplyWithStacks)
+				statAlters[i].deltaStat = statAlters[i].baseDeltaStat * stacks;
+		}
+	}
 }
 
 void UEffect::SetStacks(int32 newAmt)
 {
 	if (bHasStacks)
+	{
 		stacks = newAmt;
+		for (int32 i = 0; i < statAlters.Num(); i++)
+		{
+			if (statAlters[i].bShouldMultiplyWithStacks)
+				statAlters[i].deltaStat = statAlters[i].baseDeltaStat * stacks;
+		}
+	}
 }

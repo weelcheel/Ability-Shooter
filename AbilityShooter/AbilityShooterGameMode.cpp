@@ -23,6 +23,18 @@ AAbilityShooterGameMode::AAbilityShooterGameMode()
 	basePlayerRespawnTime = 10.f;
 }
 
+void AAbilityShooterGameMode::PostLogin(APlayerController* newPlayer)
+{
+	Super::PostLogin(newPlayer);
+
+	AAbilityShooterPlayerController* pc = Cast<AAbilityShooterPlayerController>(newPlayer);
+
+	if (IsValid(pc))
+	{
+		pc->storeItems = storeItems;
+	}
+}
+
 void AAbilityShooterGameMode::ShooterKilled(AController* Killer, AController* KilledPlayer, APawn* KilledPawn, const UDamageType* DamageType)
 {
 	//@TODO: notify player states about Shooter deaths

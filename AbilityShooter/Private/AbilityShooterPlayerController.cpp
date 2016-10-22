@@ -179,6 +179,20 @@ void AAbilityShooterPlayerController::Possess(APawn* InPawn)
 	Super::Possess(InPawn);
 }
 
+bool AAbilityShooterPlayerController::ServerUpgradeOutfit_Validate(uint8 tree, uint8 row, uint8 col)
+{
+	return true;
+}
+
+void AAbilityShooterPlayerController::ServerUpgradeOutfit_Implementation(uint8 tree, uint8 row, uint8 col)
+{
+	AAbilityShooterCharacter* ownedCharacter = Cast<AAbilityShooterCharacter>(GetCharacter());
+	if (IsValid(ownedCharacter))
+	{
+		ownedCharacter->UpgradeOutfit(tree, row, col);
+	}
+}
+
 void AAbilityShooterPlayerController::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);

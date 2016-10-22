@@ -68,6 +68,9 @@ AAbilityShooterCharacter::AAbilityShooterCharacter()
 	aboveHeadWidget->SetupAttachment(RootComponent, TEXT("hpbar"));
 	aboveHeadWidget->SetWidgetClass(aboveHeadWidgetClass);
 	aboveHeadWidget->SetDrawSize(FVector2D(0.f, 0.f));
+
+	for (int32 i = 0; i < 7; i++)
+		abilities.Add(nullptr);
 }
 
 void AAbilityShooterCharacter::PostInitializeComponents()
@@ -148,15 +151,51 @@ void AAbilityShooterCharacter::OnRep_ClientMoveSpeed()
 	
 }
 
-void AAbilityShooterCharacter::AddAbility(TSubclassOf<AAbility> newType)
+void AAbilityShooterCharacter::AddAbility(TSubclassOf<AAbility> newType, bool bFromOutfit)
 {
 	//only run on server with a valid class
 	if (Role < ROLE_Authority || !IsValid(newType))
 		return;
 
+	//abilities array is corrupt
+	if (abilities.Num() != 7)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("The abilities array for a Shooter is corrupt!"));
+		return;
+	}
+
 	//don't add if we don't have enough room
 	if (abilities.Num() + 1 > maxAbilityCount)
 		return;
+
+	int selectedIndex = -1;
+	if (newType->GetDefaultObject<AAbility>()->bUltimateAbility)
+		selectedIndex = 2;
+	else
+	{
+		if (bFromOutfit)
+		{
+			for (int32 i = 3; i <= 6; i++)
+			{
+				if (!IsValid(abilities[i]))
+				{
+					selectedIndex = i;
+					break;
+				}
+			}
+		}
+		else
+		{
+			for (int32 i = 0; i <= 1; i++)
+			{
+				if (!IsValid(abilities[i]))
+				{
+					selectedIndex = i;
+					break;
+				}
+			}
+		}
+	}
 
 	//don't add if the Shooter already has an ultimate
 	if (newType->GetDefaultObject<AAbility>()->bUltimateAbility)
@@ -168,11 +207,14 @@ void AAbilityShooterCharacter::AddAbility(TSubclassOf<AAbility> newType)
 		}
 	}
 
+	if (selectedIndex < 0 || selectedIndex >= 7)
+		return;
+
 	AAbility* newAbility = GetWorld()->SpawnActor<AAbility>(newType, GetActorLocation(), GetActorRotation());
 	if (IsValid(newAbility))
 	{
 		newAbility->SetupAbility(this);
-		abilities.AddUnique(newAbility);
+		abilities[selectedIndex] = newAbility;
 	}
 }
 
@@ -205,6 +247,11 @@ void AAbilityShooterCharacter::PossessedBy(class AController* C)
 	Super::PossessedBy(C);
 
 	//@TODO: set team color now that we have a player state on the server
+}
+
+AOutfit* AAbilityShooterCharacter::GetCurrentOutfit() const
+{
+	return currentOutfit;
 }
 
 void AAbilityShooterCharacter::OnRep_PlayerState()
@@ -837,6 +884,12 @@ void AAbilityShooterCharacter::OnRep_CurrentEquipment(AEquipmentItem* lastEquipm
 	SetCurrentEquipment(currentEquipment, lastEquipment);
 }
 
+void AAbilityShooterCharacter::OnRep_CurrentOutfit()
+{
+	if (IsValid(currentOutfit))
+		currentOutfit->EquipOutfit(this);
+}
+
 void AAbilityShooterCharacter::SetCurrentEquipment(AEquipmentItem* newEquipment, AEquipmentItem* lastEquipment /* = nullptr */)
 {
 	AEquipmentItem* localLastEquipment = nullptr;
@@ -1229,6 +1282,12 @@ void AAbilityShooterCharacter::SetEffectStacks_Implementation(const FString& key
 	}
 }
 
+void AAbilityShooterCharacter::UpgradeOutfit_Implementation(uint8 tree, uint8 row, uint8 col)
+{
+	if (IsValid(currentOutfit))
+		currentOutfit->Upgrade(tree, row, col);
+}
+
 //////////////////////////////////////////////////////////////////////////
 // Replication
 
@@ -1260,4 +1319,5 @@ void AAbilityShooterCharacter::GetLifetimeReplicatedProps(TArray< FLifetimePrope
 	//DOREPLIFETIME(AAbilityShooterCharacter, currentAilment); 
 	DOREPLIFETIME(AAbilityShooterCharacter, abilities);
 	//DOREPLIFETIME(AAbilityShooterCharacter, clientMoveSpeed);
+	DOREPLIFETIME(AAbilityShooterCharacter, currentOutfit);
 }

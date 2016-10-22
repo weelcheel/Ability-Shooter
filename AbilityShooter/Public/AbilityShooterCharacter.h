@@ -4,6 +4,7 @@
 #include "Sound/SoundCue.h"
 #include "Effect.h"
 #include "CharacterAction.h"
+#include "Outfit.h"
 
 #include "Runtime/UMG/Public/UMG.h"
 #include "Runtime/UMG/Public/UMGStyle.h"
@@ -159,6 +160,10 @@ protected:
 
 	/* max number of abilities this Shooter can have */
 	int32 maxAbilityCount;
+
+	/* current outfit this shooter has equipped */
+	UPROPERTY(Transient, ReplicatedUsing = OnRep_CurrentOutfit)
+	AOutfit* currentOutfit;
 
 	/** Time at which point the last take hit info for the actor times out and won't be replicated; Used to stop join-in-progress effects all over the screen */
 	float LastTakeHitTimeTimeout;
@@ -325,6 +330,10 @@ protected:
 	UFUNCTION()
 	void OnRep_CurrentEquipment(AEquipmentItem* lastEquipment);
 
+	/* whenever the outfit is replicated to clients */
+	UFUNCTION()
+	void OnRep_CurrentOutfit();
+
 	/* notify the client of Ailment */
 	//UFUNCTION()
 	//void OnRep_Ailment();
@@ -408,6 +417,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Game|Equipment")
 	AEquipmentItem* GetCurrentEquipment() const;
 
+	/** get currently equipped outfit */
+	UFUNCTION(BlueprintCallable, Category = "Game|Outfit")
+	AOutfit* GetCurrentOutfit() const;
+
 	/** updates current weapon */
 	void SetCurrentEquipment(AEquipmentItem* newEquipment, AEquipmentItem* lastEquipment = nullptr);
 
@@ -459,7 +472,7 @@ public:
 
 	/* [server] adds a type of ability to this character's inventory */
 	UFUNCTION(BlueprintCallable, Category = Abilities)
-	void AddAbility(TSubclassOf<AAbility> newType);
+	void AddAbility(TSubclassOf<AAbility> newType, bool bFromOutfit = false);
 
 	/* [server] adds an already exisiting ability to this character's inventory */
 	UFUNCTION(BlueprintCallable, Category = Abilities)
@@ -513,5 +526,9 @@ public:
 	/* (must be called on server) add to stacks of an effect */
 	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Abilities)
 	void SetEffectStacks(const FString& key, int32 newAmt, bool bShouldResetEffectTimer = true);
+
+	/* upgrade the outfit across all clients */
+	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Outfit)
+	void UpgradeOutfit(uint8 tree, uint8 row, uint8 col);
 };
 

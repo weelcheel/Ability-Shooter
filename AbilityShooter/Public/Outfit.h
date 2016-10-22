@@ -2,8 +2,12 @@
 
 #include "ShooterItem.h"
 #include "StoreItem.h"
-#include "OutfitUpgrade.h"
+#include "StatsManager.h"
 #include "Outfit.generated.h"
+
+class AAbilityShooterCharacter;
+class AOutfitUpgrade;
+class AAbility;
 
 USTRUCT(Blueprintable)
 struct FOutfitUpgradeSlot
@@ -14,9 +18,18 @@ struct FOutfitUpgradeSlot
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = UpgradeSlot)
 	FStoreItem upgradeItem;
 
+	/* spawned upgrade if active */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = UpgradeSlot)
+	AOutfitUpgrade* spawnedUpgrade;
+
 	/* whether or not this upgrade is active */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = UpgradeSlot)
 	bool bIsUpgradeActive = false;
+
+	bool ShouldActivate() const
+	{
+		return !bIsUpgradeActive;
+	}
 };
 
 USTRUCT(Blueprintable)
@@ -32,6 +45,8 @@ struct FOutfitUpgradeRow
 UCLASS(ABSTRACT, Blueprintable)
 class AOutfit : public AShooterItem
 {
+	friend class AOutfitUpgrade;
+
 	GENERATED_BODY()
 
 protected:
@@ -48,6 +63,27 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = UpgradeTree)
 	TArray<FOutfitUpgradeRow> utilityUpgradeTree;
 
+	/* array of abilities that this outfit gives to the owning character (this and upgrades can only give max 4 abilities) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = Abilities)
+	TArray<TSubclassOf<AAbility> > abilities;
+
+	/* owner of the outfit */
+	AAbilityShooterCharacter* owningCharacter;
+
+	/* blueprint hook for when the outfit is equipped */
+	UFUNCTION(BlueprintImplementableEvent, Category = Equip)
+	void OnEquipped(AAbilityShooterCharacter* newOwner);
+
 public:
 	AOutfit();
+
+	/* stats that this outfit affects for the character wearing it. change with upgrades */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = Stats)
+	FBaseStats stats;
+
+	/* called when the outfit is equipped to a Shooter */
+	void EquipOutfit(AAbilityShooterCharacter* character);
+
+	/* upgrade the outfit */
+	void Upgrade(uint8 tree, uint8 row, uint8 col);
 };

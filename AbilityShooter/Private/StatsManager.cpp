@@ -23,11 +23,6 @@ float UStatsManager::GetCurrentStatValue(EStat stat)
 	//first get the base stat
 	statn = GetBaseStatValue(stat);
 
-	if (IsValid(characterOwner->GetCurrentOutfit()))
-	{
-		statn += GetStatFromBaseStatAddition(statn, stat, characterOwner->GetCurrentOutfit()->stats);
-	}
-
 	return statn;
 }
 

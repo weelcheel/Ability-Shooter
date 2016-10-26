@@ -222,6 +222,9 @@ void AAbility::ContinueHandlePerform()
 	{
 		for (AAbility* ability : characterOwner->abilities)
 		{
+			if (!IsValid(ability))
+				continue;
+
 			if ((ability->GetCurrentState() == EAbilityState::Performing || ability->GetCurrentState() == EAbilityState::Aiming) && ability != this)
 				ability->ForceStopAbility();
 		}
@@ -231,6 +234,9 @@ void AAbility::ContinueHandlePerform()
 	{
 		for (AAbility* ability : characterOwner->abilities)
 		{
+			if (!IsValid(ability))
+				continue;
+
 			if (ability != this)
 				ability->SetDisabled(true);
 		}
@@ -330,6 +336,9 @@ void AAbility::OnStopPerform(bool bFromPerforming, bool bForcedStop)
 	{
 		for (AAbility* ability : characterOwner->abilities)
 		{
+			if (!IsValid(ability))
+				continue;
+
 			if (ability != this)
 				ability->SetDisabled(false);
 		}
@@ -424,6 +433,12 @@ void AAbility::SetupAbility(AAbilityShooterCharacter* newOwner)
 
 		FDetachmentTransformRules rules(EDetachmentRule::KeepWorld, false);
 		DetachFromActor(rules);
+	}
+
+	if (IsValid(characterOwner))
+	{
+		characterOwner->OnShooterDamaged.AddDynamic(this, &AAbility::OnOwnerDamaged);
+		characterOwner->OnShooterDealtDamage.AddDynamic(this, &AAbility::OnOwnerDealtDamage);
 	}
 	
 	DetermineState();

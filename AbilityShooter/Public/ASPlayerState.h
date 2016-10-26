@@ -22,6 +22,10 @@ protected:
 
 public:
 	AASPlayerState();
+	
+	/* amount of cash this player has */
+	UPROPERTY(replicated, BlueprintReadWrite, Category = Cash)
+	int32 cash;
 
 	/* net multicast function to set the respawn timer on all clients but actually performs the respawn on the server */
 	UFUNCTION(NetMulticast, reliable)

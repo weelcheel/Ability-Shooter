@@ -76,6 +76,12 @@ void AEquipmentItem::OnEquip(const AEquipmentItem* lastItem)
 
 	if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
 		PlayEquipmentSound(equipSound);
+
+	if (IsValid(characterOwner))
+	{
+		characterOwner->OnShooterDamaged.AddDynamic(this, &AEquipmentItem::OnOwnerDamaged);
+		characterOwner->OnShooterDealtDamage.AddDynamic(this, &AEquipmentItem::OnOwnerDealtDamage);
+	}
 }
 
 void AEquipmentItem::OnEquipFinished()
@@ -100,6 +106,12 @@ void AEquipmentItem::OnUnEquip()
 		bPendingEquip = false;
 
 		GetWorldTimerManager().ClearTimer(onEquipFinishedTimer);
+	}
+
+	if (IsValid(characterOwner))
+	{
+		characterOwner->OnShooterDamaged.RemoveAll(this);
+		characterOwner->OnShooterDealtDamage.RemoveAll(this);
 	}
 
 	DetermineEquipmentState();

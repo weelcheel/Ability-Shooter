@@ -3,6 +3,7 @@
 #include "ShooterItem.h"
 #include "StoreItem.h"
 #include "StatsManager.h"
+#include "ShooterDamage.h"
 #include "Outfit.generated.h"
 
 class AAbilityShooterCharacter;
@@ -68,6 +69,7 @@ protected:
 	TArray<TSubclassOf<AAbility> > abilities;
 
 	/* owner of the outfit */
+	UPROPERTY(BlueprintReadOnly, Category = Owner)
 	AAbilityShooterCharacter* owningCharacter;
 
 	/* blueprint hook for when the outfit is equipped */

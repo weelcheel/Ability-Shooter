@@ -4,6 +4,8 @@
 AShooterItem::AShooterItem()
 {
 	uiIcon = nullptr;
+
+	bReplicates = true;
 }
 
 UObject* AShooterItem::GetDefaultObjectForClass(TSubclassOf<UObject> type)

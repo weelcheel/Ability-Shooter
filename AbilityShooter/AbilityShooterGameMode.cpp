@@ -32,6 +32,10 @@ void AAbilityShooterGameMode::PostLogin(APlayerController* newPlayer)
 	if (IsValid(pc))
 	{
 		pc->storeItems = storeItems;
+		
+		AASPlayerState* ps = Cast<AASPlayerState>(pc->PlayerState);
+		if (IsValid(ps))
+			ps->cash = 5000;
 	}
 }
 

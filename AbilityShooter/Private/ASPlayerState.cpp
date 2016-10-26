@@ -24,4 +24,5 @@ void AASPlayerState::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & Ou
 
 	// everyone
 	DOREPLIFETIME(AASPlayerState, team);
+	DOREPLIFETIME(AASPlayerState, cash);
 }

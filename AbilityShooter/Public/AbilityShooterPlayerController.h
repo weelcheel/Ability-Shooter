@@ -7,6 +7,7 @@
 #include "AbilityShooterPlayerController.generated.h"
 
 struct FEffectInitInfo;
+struct FStoreItem;
 class AAbility;
 class UStatsManager;
 
@@ -80,6 +81,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Pawn", meta = (Keywords = "set controller"))
 	virtual void Possess(APawn* InPawn) override;
+
+	/* lets UI call for an equipment purchase */
+	UFUNCTION(BlueprintCallable, reliable, server, WithValidation, Category = Store)
+	void ServerIngameStorePurchase(FStoreItem purchaseItem);
 
 	/* lets UI call for an upgrade on an outfit */
 	UFUNCTION(BlueprintCallable, reliable, server, WithValidation, Category = OutfitUpgrade)

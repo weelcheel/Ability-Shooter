@@ -8,6 +8,10 @@
 #include "PlayerHUD.h"
 #include "StatsManager.h"
 #include "UnrealNetwork.h"
+#include "StoreItem.h"
+#include "ShooterItem.h"
+#include "Outfit.h"
+#include "EquipmentItem.h"
 
 AAbilityShooterPlayerController::AAbilityShooterPlayerController()
 {
@@ -190,6 +194,43 @@ void AAbilityShooterPlayerController::ServerUpgradeOutfit_Implementation(uint8 t
 	if (IsValid(ownedCharacter))
 	{
 		ownedCharacter->UpgradeOutfit(tree, row, col);
+	}
+}
+
+bool AAbilityShooterPlayerController::ServerIngameStorePurchase_Validate(FStoreItem purchaseItem)
+{
+	return true;
+}
+
+void AAbilityShooterPlayerController::ServerIngameStorePurchase_Implementation(FStoreItem purchaseItem)
+{
+	AASPlayerState* ps = Cast<AASPlayerState>(PlayerState);
+	if (IsValid(ps))
+	{
+		if (ps->cash - purchaseItem.cost < 0)
+			return;
+		else
+			ps->cash -= purchaseItem.cost;
+	}
+
+	if (IsValid(currentCharacter))
+	{
+		AShooterItem* newItem = GetWorld()->SpawnActor<AShooterItem>(purchaseItem.itemType);
+		if (IsValid(newItem))
+		{
+			if (newItem->IsA(AOutfit::StaticClass()))
+			{
+				currentCharacter->EquipOutfit(Cast<AOutfit>(newItem));
+			}
+			else if (newItem->IsA(AEquipmentItem::StaticClass()))
+			{
+				currentCharacter->AddEquipment(Cast<AEquipmentItem>(newItem));
+			}
+			else if (newItem->IsA(AAbility::StaticClass()))
+			{
+				currentCharacter->AddExistingAbility(Cast<AAbility>(newItem));
+			}
+		}
 	}
 }
 

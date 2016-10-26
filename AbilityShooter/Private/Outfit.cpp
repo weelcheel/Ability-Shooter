@@ -6,12 +6,19 @@
 
 AOutfit::AOutfit()
 {
-
+	stats.equipUseRate = 0.f;
+	stats.critRatio = 0.f;
 }
 
 void AOutfit::EquipOutfit(AAbilityShooterCharacter* character)
 {
 	owningCharacter = character;
+
+	if (IsValid(owningCharacter))
+	{
+		owningCharacter->OnShooterDamaged.AddDynamic(this, &AOutfit::OnOwnerDamaged);
+		owningCharacter->OnShooterDealtDamage.AddDynamic(this, &AOutfit::OnOwnerDealtDamage);
+	}
 
 	OnEquipped(character);
 }

@@ -3,6 +3,7 @@
 #include "AbilityShooterCharacter.h"
 #include "AbilityShooterTypes.h"
 #include "Effect.h"
+#include "ShooterDamage.h"
 #include "Ability.generated.h"
 
 UENUM()
@@ -17,7 +18,7 @@ enum class EAbilityState : uint8
 };
 
 UCLASS()
-class AAbility : public AActor
+class AAbility : public AShooterItem
 {
 	friend class AAbilityShooterCharacter;
 
@@ -122,14 +123,6 @@ protected:
 	/* array of cooldowns for each veteran level available */
 	UPROPERTY(EditDefaultsOnly, Category = Ability)
 	TArray<float> baseCooldownTimes;
-
-	/* name of this Ability */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = Ability)
-	FText title;
-
-	/* description of the Ability */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = Ability)
-	FText description;
 
 	/* amount of time (if any) this Ability takes as a Character Action before performing */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = Ability)
@@ -321,13 +314,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	FText GetTitle() const
 	{
-		return title;
+		return uiName;
 	}
 
 	/* gets the Ability's desc */
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	FText GetDescription() const
 	{
-		return description;
+		return uiDescription;
 	}
 };

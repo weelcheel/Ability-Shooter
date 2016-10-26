@@ -68,9 +68,6 @@ AAbilityShooterCharacter::AAbilityShooterCharacter()
 	aboveHeadWidget->SetupAttachment(RootComponent, TEXT("hpbar"));
 	aboveHeadWidget->SetWidgetClass(aboveHeadWidgetClass);
 	aboveHeadWidget->SetDrawSize(FVector2D(0.f, 0.f));
-
-	for (int32 i = 0; i < 7; i++)
-		abilities.Add(nullptr);
 }
 
 void AAbilityShooterCharacter::PostInitializeComponents()
@@ -81,6 +78,9 @@ void AAbilityShooterCharacter::PostInitializeComponents()
 	{
 		health = GetMaxHealth();
 		SpawnDefaultInventory();
+
+		for (int32 i = 0; i < 7; i++)
+			abilities.Add(nullptr);
 	}
 
 	//@TODO: setup team color material IDs
@@ -164,10 +164,6 @@ void AAbilityShooterCharacter::AddAbility(TSubclassOf<AAbility> newType, bool bF
 		return;
 	}
 
-	//don't add if we don't have enough room
-	if (abilities.Num() + 1 > maxAbilityCount)
-		return;
-
 	int selectedIndex = -1;
 	if (newType->GetDefaultObject<AAbility>()->bUltimateAbility)
 		selectedIndex = 2;
@@ -177,7 +173,8 @@ void AAbilityShooterCharacter::AddAbility(TSubclassOf<AAbility> newType, bool bF
 		{
 			for (int32 i = 3; i <= 6; i++)
 			{
-				if (!IsValid(abilities[i]))
+				AAbility* test = abilities[i];
+				if (!IsValid(test))
 				{
 					selectedIndex = i;
 					break;
@@ -188,7 +185,8 @@ void AAbilityShooterCharacter::AddAbility(TSubclassOf<AAbility> newType, bool bF
 		{
 			for (int32 i = 0; i <= 1; i++)
 			{
-				if (!IsValid(abilities[i]))
+				AAbility* test = abilities[i];
+				if (!IsValid(test))
 				{
 					selectedIndex = i;
 					break;
@@ -202,6 +200,9 @@ void AAbilityShooterCharacter::AddAbility(TSubclassOf<AAbility> newType, bool bF
 	{
 		for (AAbility* ability : abilities)
 		{
+			if (!IsValid(ability))
+				continue;
+
 			if (ability->bUltimateAbility)
 				return;
 		}
@@ -220,26 +221,25 @@ void AAbilityShooterCharacter::AddAbility(TSubclassOf<AAbility> newType, bool bF
 
 void AAbilityShooterCharacter::AddExistingAbility(AAbility* ability)
 {
-	//only run on server with a valid ability
-	if (Role < ROLE_Authority || !IsValid(ability) || ability->GetCurrentState() != EAbilityState::NoOwner)
+	//only run on server with a valid class
+	if (Role < ROLE_Authority || !IsValid(ability))
 		return;
 
-	//don't add if we don't have enough room
-	if (abilities.Num() + 1 > GetMaxAbilityCount())
-		return;
-
-	//don't add if the Shooter already has an ultimate
-	if (ability->bUltimateAbility)
+	int32 selectedIndex = -1;
+	for (int32 i = 0; i < abilities.Num(); i++)
 	{
-		for (AAbility* locability : abilities)
+		if (!IsValid(abilities[i]))
 		{
-			if (locability->bUltimateAbility)
-				return;
+			selectedIndex = i;
+			break;
 		}
 	}
 
+	if (selectedIndex < 0 || selectedIndex >= 7)
+		return;
+
 	ability->SetupAbility(this);
-	abilities.AddUnique(ability);
+	abilities[selectedIndex] = ability;
 }
 
 void AAbilityShooterCharacter::PossessedBy(class AController* C)
@@ -362,6 +362,15 @@ void AAbilityShooterCharacter::EquipEquipment(AEquipmentItem* item)
 			SetCurrentEquipment(item);
 		else
 			ServerEquipEquipment(item);
+	}
+}
+
+void AAbilityShooterCharacter::EquipOutfit(AOutfit* newOutfit)
+{
+	if (IsValid(newOutfit))
+	{
+		currentOutfit = newOutfit;
+		currentOutfit->EquipOutfit(this);
 	}
 }
 
@@ -503,11 +512,28 @@ void AAbilityShooterCharacter::OnRep_LastTakeHitInfo()
 
 float AAbilityShooterCharacter::TakeDamage(float Damage, FDamageEvent const & DamageEvent, AController * EventInstigator, AActor * DamageCauser)
 {
-	//@TODO: check for invulnerability
-
 	//don't damage already dead characters
 	if (health <= 0.f)
 		return 0.0f;
+
+	//@TODO: check for invulnerability
+
+	//broadcast that this shooter was damaged
+	FShooterDamage shooterDamage;
+	shooterDamage.Damage = Damage;
+	shooterDamage.DamageEvent = DamageEvent;
+	shooterDamage.EventInstigator = EventInstigator;
+	shooterDamage.DamageCauser = DamageCauser;
+
+	OnShooterDamaged.Broadcast(shooterDamage);
+
+	AAbilityShooterPlayerController* pc = Cast<AAbilityShooterPlayerController>(EventInstigator);
+	if (IsValid(pc))
+	{
+		AAbilityShooterCharacter* damagingShooter = Cast<AAbilityShooterCharacter>(pc->GetCharacter());
+		if (IsValid(damagingShooter) && damagingShooter->IsAlive())
+			damagingShooter->OnShooterDealtDamage.Broadcast(shooterDamage, this);
+	}
 
 	//@TODO: let the gametype modify the damage
 	//@TODO: let the stats then modify the damage
@@ -541,6 +567,9 @@ bool AAbilityShooterCharacter::CanPerformAbilities() const
 	bool bIsAimingAnAbility = false;
 	for (AAbility* ability : abilities)
 	{
+		if (!IsValid(ability))
+			continue;
+
 		if (ability->GetCurrentState() == EAbilityState::Aiming)
 			bIsAimingAnAbility = true;
 	}
@@ -596,6 +625,9 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FDamageEvent const &
 		//end all abilities that are being performed right now
 		for (AAbility* ability : abilities)
 		{
+			if (!IsValid(ability))
+				continue;
+
 			if (ability->GetCurrentState() == EAbilityState::Performing)
 				ability->ForceStopAbility();
 		}
@@ -641,6 +673,9 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FDamageEvent const &
 		//transfer abilities
 		for (AAbility* ability : abilities)
 		{
+			if (!IsValid(ability))
+				continue;
+
 			ability->SetupAbility(nullptr);
 			pc->persistentAbilities.AddUnique(ability);
 		}
@@ -755,6 +790,9 @@ void AAbilityShooterCharacter::PrimaryUseStart()
 	//check for confirming aim in abilities first
 	for (AAbility* ability : abilities)
 	{
+		if (!IsValid(ability))
+			continue;
+
 		if (ability->GetCurrentState() == EAbilityState::Aiming)
 		{
 			ability->ConfirmAim();
@@ -1039,12 +1077,18 @@ float AAbilityShooterCharacter::GetCurrentStat(EStat stat) const
 		}
 	}
 
+	//next let outfits change the stats
+	if (IsValid(currentOutfit) && IsValid(statsManager))
+	{
+		statDelta = statsManager->GetStatFromBaseStatAddition(statDelta, stat, currentOutfit->stats);
+	}
+
 	switch (stat)
 	{
 	case EStat::ES_EquipUseRate:
 		if (IsValid(currentEquipment) && statDelta > 0.f)
-			return currentEquipment->timesBetweenUse * statDelta;
-		else
+			return currentEquipment->timesBetweenUse / statDelta;
+		else if (IsValid(currentEquipment))
 			return currentEquipment->timesBetweenUse;
 	case EStat::ES_CritRatio:
 		return statDelta > 0.f ? baseStats.critRatio * statDelta : baseStats.critRatio;
@@ -1240,6 +1284,9 @@ void AAbilityShooterCharacter::SendInterruptToAbilities(EAbilityInterruptSignal 
 {
 	for (AAbility* ability : abilities)
 	{
+		if (!IsValid(ability))
+			continue;
+
 		if (ability->GetCurrentState() == EAbilityState::Performing)
 			ability->HandleInterrupt(signal);
 	}

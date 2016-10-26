@@ -5,6 +5,7 @@
 #include "Effect.h"
 #include "CharacterAction.h"
 #include "Outfit.h"
+#include "ShooterDamage.h"
 
 #include "Runtime/UMG/Public/UMG.h"
 #include "Runtime/UMG/Public/UMGStyle.h"
@@ -19,6 +20,10 @@ class AEquipmentItem;
 class AAbility;
 class AASPlayerState;
 
+/* Shooter damage event declaration */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FShooterDamagedDelegate, FShooterDamage, damageInfo);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FShooterDealtDamageDelegate, FShooterDamage, damageInfo, AAbilityShooterCharacter*, damagedCharacter);
+
 /* types for hard Crowd Control (Ailments) */
 UENUM(BlueprintType)
 enum class EAilment : uint8
@@ -28,7 +33,7 @@ enum class EAilment : uint8
 	AL_Stun UMETA(DisplayName = "Stunned"),
 	AL_Neutral UMETA(DisplayName = "Neutralized"),
 	AL_Blind UMETA(DisplayName = "Blinded"),
-	AL_Snare UMETA(DisplayName = "Snared"),
+	AL_Snare UMETA(DisplayName = "Immobilzed"),
 	AL_Max UMETA(Hidden)
 };
 
@@ -106,6 +111,7 @@ class AAbilityShooterCharacter : public ACharacter
 {
 	friend class UStatsManager;
 	friend class AAbility;
+	friend class AAbilityShooterPlayerController;
 
 	GENERATED_BODY()
 
@@ -135,6 +141,16 @@ public:
 	/** Base look up/down rate, in deg/sec. Other scaling may affect final rate. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Camera)
 	float BaseLookUpRate;
+
+	/* --EVENT DELEGATES --------------------------------------------------------*/
+
+	/* delegate to handle shooter damage events */
+	UPROPERTY(BlueprintAssignable)
+	FShooterDamagedDelegate OnShooterDamaged;
+
+	/* delegate to handle when this shooter deals damage */
+	UPROPERTY(BlueprintAssignable)
+	FShooterDealtDamageDelegate OnShooterDealtDamage;
 
 protected:
 
@@ -526,6 +542,10 @@ public:
 	/* (must be called on server) add to stacks of an effect */
 	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Abilities)
 	void SetEffectStacks(const FString& key, int32 newAmt, bool bShouldResetEffectTimer = true);
+
+	/* upgrade the outfit across all clients */
+	UFUNCTION(BlueprintCallable, Category=Outfit)
+	void EquipOutfit(AOutfit* newOutfit);
 
 	/* upgrade the outfit across all clients */
 	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Outfit)

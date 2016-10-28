@@ -18,6 +18,11 @@ int32 AASPlayerState::GetTeamIndex() const
 	return team;
 }
 
+void AASPlayerState::SetTeamIndex(int32 newTeam)
+{
+	team = newTeam;
+}
+
 void AASPlayerState::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);

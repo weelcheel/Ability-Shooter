@@ -3,6 +3,7 @@
 #include "AbilityShooterCharacter.h"
 #include "OutfitUpgrade.h"
 #include "StatsManager.h"
+#include "Ability.h"
 
 AOutfit::AOutfit()
 {
@@ -16,6 +17,11 @@ void AOutfit::EquipOutfit(AAbilityShooterCharacter* character)
 
 	if (IsValid(owningCharacter))
 	{
+		for (TSubclassOf<AAbility> abType : abilities)
+		{
+			owningCharacter->AddAbility(abType, true);
+		}
+
 		owningCharacter->OnShooterDamaged.AddDynamic(this, &AOutfit::OnOwnerDamaged);
 		owningCharacter->OnShooterDealtDamage.AddDynamic(this, &AOutfit::OnOwnerDealtDamage);
 	}

@@ -34,4 +34,7 @@ public:
 	/* gets the team index for this player */
 	UFUNCTION(BlueprintCallable, Category = Team)
 	int32 GetTeamIndex() const;
+
+	/* sets the team index */
+	void SetTeamIndex(int32 newTeam);
 };

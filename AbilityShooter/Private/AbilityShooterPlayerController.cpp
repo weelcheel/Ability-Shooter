@@ -234,6 +234,15 @@ void AAbilityShooterPlayerController::ServerIngameStorePurchase_Implementation(F
 	}
 }
 
+void AAbilityShooterPlayerController::SetControlRotation(const FRotator& NewRotation)
+{
+	Super::SetControlRotation(NewRotation);
+
+	AASPlayerState* ps = Cast<AASPlayerState>(PlayerState);
+	if (IsValid(ps))
+		ps->viewRotation = NewRotation;
+}
+
 void AAbilityShooterPlayerController::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);

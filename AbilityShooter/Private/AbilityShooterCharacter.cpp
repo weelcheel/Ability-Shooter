@@ -109,8 +109,6 @@ void AAbilityShooterCharacter::PawnClientRestart()
 	//reattach equipment if needed
 	SetCurrentEquipment(currentEquipment);
 
-	health = GetMaxHealth();
-
 	//@TODO: set mesh team color material instance
 }
 
@@ -141,6 +139,26 @@ void AAbilityShooterCharacter::Tick(float DeltaSeconds)
 
 		if (IsValid(hit.GetActor()) && hit.GetActor()->Tags.Contains(TEXT("usable")))
 			newUseObject = hit.GetActor();
+		else if (IsValid(hit.GetActor()) && hit.GetActor()->IsA(AAbilityShooterCharacter::StaticClass()))
+		{
+			APlayerController* pc = Cast<APlayerController>(GetController());
+			if (IsValid(pc))
+			{
+				APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
+				if (IsValid(hud))
+					hud->OnCharacterTargeted(Cast<AAbilityShooterCharacter>(hit.GetActor()));
+			}
+		}
+		else
+		{
+			APlayerController* pc = Cast<APlayerController>(GetController());
+			if (IsValid(pc))
+			{
+				APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
+				if (IsValid(hud))
+					hud->OnCharacterUnTargeted();
+			}
+		}
 
 		currentUseObject = newUseObject;
 	}
@@ -667,6 +685,10 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FDamageEvent const &
 
 		i--;
 	}
+
+	//remove weapons from inventory
+	if (IsValid(currentEquipment))
+		currentEquipment->OnLeaveInventory();
 
 	if (IsValid(pc) && Role == ROLE_Authority)
 	{
@@ -1333,6 +1355,16 @@ void AAbilityShooterCharacter::UpgradeOutfit_Implementation(uint8 tree, uint8 ro
 {
 	if (IsValid(currentOutfit))
 		currentOutfit->Upgrade(tree, row, col);
+}
+
+FRotator AAbilityShooterCharacter::GetAbilityControlRotation() const
+{
+	//return the replicated one first if available
+	AASPlayerState* ps = Cast<AASPlayerState>(PlayerState);
+	if (IsValid(ps))
+		return ps->viewRotation;
+
+	return GetControlRotation();
 }
 
 //////////////////////////////////////////////////////////////////////////

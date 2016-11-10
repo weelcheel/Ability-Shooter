@@ -5,6 +5,7 @@
 #include "PlayerHUD.generated.h"
 
 class UUserWidget;
+class AAbilityShooterCharacter;
 
 UCLASS()
 class APlayerHUD : public AHUD
@@ -44,4 +45,12 @@ public:
 	/* called whenever the a quest is completed and it is removed from the quest list and rewards are given */
 	UFUNCTION(BlueprintImplementableEvent, Category = Quests)
 	void OnQuestCompleted(UQuest* quest);
+
+	/* called whenever the player looks at a game character target */
+	UFUNCTION(BlueprintImplementableEvent, Category = TargetUI)
+	void OnCharacterTargeted(AAbilityShooterCharacter* target);
+
+	/* called whenever the player stops looking at a game character target */
+	UFUNCTION(BlueprintImplementableEvent, Category = TargetUI)
+	void OnCharacterUnTargeted();
 };

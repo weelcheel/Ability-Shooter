@@ -23,7 +23,7 @@ AEquipmentItem::AEquipmentItem()
 	bIsEquipped = false;
 	bWantsToUse = false;
 	bPendingEquip = false;
-	currentState = EEquipmentState::Idle;
+	currentState = EEquipmentState::NoOwner;
 	bWantsToAlt = false;
 	bIsAltActive = false;
 
@@ -120,6 +120,8 @@ void AEquipmentItem::OnUnEquip()
 void AEquipmentItem::OnEnterInventory(AAbilityShooterCharacter* newOwner)
 {
 	SetOwningCharacter(newOwner);
+
+	currentState = EEquipmentState::Idle;
 }
 
 void AEquipmentItem::OnLeaveInventory()
@@ -129,6 +131,8 @@ void AEquipmentItem::OnLeaveInventory()
 
 	if (IsAttachedToCharacter())
 		OnUnEquip();
+
+	currentState = EEquipmentState::NoOwner;
 }
 
 void AEquipmentItem::AttachMeshToCharacter()

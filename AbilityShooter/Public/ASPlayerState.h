@@ -27,6 +27,10 @@ public:
 	UPROPERTY(replicated, BlueprintReadWrite, Category = Cash)
 	int32 cash;
 
+	/* current view rotation for this player so that their aim is successfully replicated */
+	UPROPERTY(replicated, BlueprintReadOnly, Category = ViewRotation)
+	FRotator viewRotation;
+
 	/* net multicast function to set the respawn timer on all clients but actually performs the respawn on the server */
 	UFUNCTION(NetMulticast, reliable)
 	void SetRespawnTimer(float repsawnTime);

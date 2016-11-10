@@ -89,4 +89,8 @@ public:
 	/* lets UI call for an upgrade on an outfit */
 	UFUNCTION(BlueprintCallable, reliable, server, WithValidation, Category = OutfitUpgrade)
 	void ServerUpgradeOutfit(uint8 tree, uint8 row, uint8 col);
+
+	/** Set the control rotation. The RootComponent's rotation will also be updated to match it if RootComponent->bAbsoluteRotation is true. */
+	UFUNCTION(BlueprintCallable, Category = "Pawn", meta = (Tooltip = "Set the control rotation."))
+	virtual void SetControlRotation(const FRotator& NewRotation) override;
 };

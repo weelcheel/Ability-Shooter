@@ -45,9 +45,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = PlayerCount)
 	int32 maxNumPlayers;
 
-	/* gets the respawn timer for the player */
-	virtual float GetRespawnTime(class AAbilityShooterPlayerController* player) const;
-
 	/* check to see if there is enough room for the player */
 	virtual void PreLogin(const FString& Options, const FString& Address, const TSharedPtr<const FUniqueNetId>& UniqueId, FString& ErrorMessage);
 
@@ -68,6 +65,9 @@ public:
 
 	/* handle new respawn algorithm */
 	virtual void RestartPlayer(class AController* NewPlayer) override;
+
+	/* gets the respawn timer for the player */
+	virtual float GetRespawnTime(class AController* player) const;
 };
 
 

@@ -112,6 +112,7 @@ class AAbilityShooterCharacter : public ACharacter
 	friend class UStatsManager;
 	friend class AAbility;
 	friend class AAbilityShooterPlayerController;
+	friend class AAbilityShooterGameMode;
 
 	GENERATED_BODY()
 
@@ -287,41 +288,6 @@ protected:
 	/** Handler for when a touch input stops. */
 	void TouchStopped(ETouchIndex::Type FingerIndex, FVector Location);
 
-	/** handler for primary equipment use starting*/
-	void PrimaryUseStart();
-
-	/** handler for primary equipment use stopping */
-	void PrimaryUseStop();
-
-	/** handler for alternate equipment use starting */
-	void AlternateUseStart();
-
-	/** handler for alternate equipment use stopping */
-	void AlternateUseStop();
-
-	/** template version for simple input */
-	template<int Index>
-	void UseAbilityStart()
-	{
-		OnStartAbility(Index);
-	}
-
-	/** template version for simple input finished */
-	template<int Index>
-	void UseAbilityStop()
-	{
-		OnStopAbility(Index);
-	}
-
-	/* handler for trying to reload the current equipment */
-	void OnTryReload();
-
-	/* handler for using nearby aimed at objects started */
-	void OnUseObjectStart();
-
-	/* handler for using nearby aimed at objects stopped */
-	void OnUseObjectStop();
-
 	// APawn interface
 	virtual void SetupPlayerInputComponent(class UInputComponent* InputComponent) override;
 	// End of APawn interface
@@ -398,6 +364,41 @@ public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	/** Returns FollowCamera subobject **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+
+	/** handler for primary equipment use starting*/
+	void PrimaryUseStart();
+
+	/** handler for primary equipment use stopping */
+	void PrimaryUseStop();
+
+	/** handler for alternate equipment use starting */
+	void AlternateUseStart();
+
+	/** handler for alternate equipment use stopping */
+	void AlternateUseStop();
+
+	/** template version for simple input */
+	template<int Index>
+	void UseAbilityStart()
+	{
+		OnStartAbility(Index);
+	}
+
+	/** template version for simple input finished */
+	template<int Index>
+	void UseAbilityStop()
+	{
+		OnStopAbility(Index);
+	}
+
+	/* handler for trying to reload the current equipment */
+	void OnTryReload();
+
+	/* handler for using nearby aimed at objects started */
+	void OnUseObjectStart();
+
+	/* handler for using nearby aimed at objects stopped */
+	void OnUseObjectStop();
 
 	/* override take damage function to allow for damage to drain HP and be modified */
 	virtual float TakeDamage(float Damage, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
@@ -550,5 +551,9 @@ public:
 	/* upgrade the outfit across all clients */
 	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Outfit)
 	void UpgradeOutfit(uint8 tree, uint8 row, uint8 col);
+
+	/* gets the replicated rotator before we try other methods */
+	UFUNCTION(BlueprintCallable, Category = "Pawn")
+	FRotator GetAbilityControlRotation() const;
 };
 

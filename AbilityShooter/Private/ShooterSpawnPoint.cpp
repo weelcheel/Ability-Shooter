@@ -5,7 +5,7 @@
 
 AShooterSpawnPoint::AShooterSpawnPoint()
 {
-	scoreRange = 1000.f;
+	scoreRange = 10000.f;
 }
 
 float AShooterSpawnPoint::GetSpawnScoreForPlayer(AASPlayerState* player) const

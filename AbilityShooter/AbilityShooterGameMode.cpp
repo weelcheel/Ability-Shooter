@@ -175,7 +175,7 @@ void AAbilityShooterGameMode::ShooterKilled(AController* Killer, AController* Ki
 		respawningPlayer->SetRespawnTimer(GetRespawnTime(respawningPlayer));
 }
 
-float AAbilityShooterGameMode::GetRespawnTime(AAbilityShooterPlayerController* player) const
+float AAbilityShooterGameMode::GetRespawnTime(AController* player) const
 {
 	//respawn timers grow as the game goes on, 1.5 seconds for each minute passed in-game
 	//@TODO: players' abilities will need to modify this value

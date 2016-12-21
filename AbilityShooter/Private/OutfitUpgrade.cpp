@@ -18,7 +18,7 @@ void AOutfitUpgrade::Activate(AAbilityShooterCharacter* upgrader, AOutfit* ownin
 	}
 
 	//give character abilities and get event hooks
-	if (IsValid(upgrader))
+	if (IsValid(upgrader) && HasAuthority())
 	{
 		for (TSubclassOf<AAbility> ability : abilities)
 		{
@@ -26,8 +26,17 @@ void AOutfitUpgrade::Activate(AAbilityShooterCharacter* upgrader, AOutfit* ownin
 		}
 
 		//add event hooks for the Shooter to broadcast to this upgrade
-		upgrader->OnShooterDamaged.AddDynamic(this, &AOutfitUpgrade::OnOwnerDamaged);
-		upgrader->OnShooterDealtDamage.AddDynamic(this, &AOutfitUpgrade::OnOwnerDealtDamage);
+		//upgrader->OnShooterDamaged.AddDynamic(this, &AOutfitUpgrade::OnOwnerDamaged);
+		//upgrader->OnShooterDealtDamage.AddDynamic(this, &AOutfitUpgrade::OnOwnerDealtDamage);
+
+		FShooterDamagedDelegate damageEvent;
+		damageEvent.BindUObject(this, &AOutfitUpgrade::OnOwnerDamaged);
+		upgrader->OnShooterDamagedEvents.Add(damageEvent);
+
+		FShooterDealtDamageDelegate damagedEvent;
+		damagedEvent.BindUObject(this, &AOutfitUpgrade::OnOwnerDealtDamage);
+		upgrader->OnShooterDealtDamageEvents.Add(damagedEvent);
+		
 	}
 
 	owningCharacter = upgrader;

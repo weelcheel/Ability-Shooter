@@ -22,8 +22,16 @@ void AOutfit::EquipOutfit(AAbilityShooterCharacter* character)
 			owningCharacter->AddAbility(abType, true);
 		}
 
-		owningCharacter->OnShooterDamaged.AddDynamic(this, &AOutfit::OnOwnerDamaged);
-		owningCharacter->OnShooterDealtDamage.AddDynamic(this, &AOutfit::OnOwnerDealtDamage);
+		FShooterDamagedDelegate damageEvent;
+		damageEvent.BindUObject(this, &AOutfit::OnOwnerDamaged);
+		owningCharacter->OnShooterDamagedEvents.Add(damageEvent);
+
+		FShooterDealtDamageDelegate damagedEvent;
+		damagedEvent.BindUObject(this, &AOutfit::OnOwnerDealtDamage);
+		owningCharacter->OnShooterDealtDamageEvents.Add(damagedEvent);
+
+		//owningCharacter->OnShooterDamaged.BindDynamic(this, &AOutfit::OnOwnerDamaged);
+		//owningCharacter->OnShooterDealtDamage.BindDynamic(this, &AOutfit::OnOwnerDealtDamage);
 	}
 
 	OnEquipped(character);
@@ -73,4 +81,44 @@ void AOutfit::Upgrade(uint8 tree, uint8 row, uint8 col)
 		}
 		break;
 	}
+}
+
+FBaseStats AOutfit::GetDeltaStats()
+{
+	FBaseStats deltaStats = stats;
+	//offense upgrades
+	for (int32 row = 0; row < offenseUpgradeTree.Num(); row++)
+	{
+		for (int32 col = 0; col < offenseUpgradeTree[row].row.Num(); col++)
+		{
+			if (offenseUpgradeTree[row].row[col].bIsUpgradeActive && IsValid(offenseUpgradeTree[row].row[col].spawnedUpgrade))
+			{
+				deltaStats += offenseUpgradeTree[row].row[col].spawnedUpgrade->stats;
+			}
+		}
+	}
+	//defense upgrades
+	for (int32 row = 0; row < defenseUpgradeTree.Num(); row++)
+	{
+		for (int32 col = 0; col < defenseUpgradeTree[row].row.Num(); col++)
+		{
+			if (defenseUpgradeTree[row].row[col].bIsUpgradeActive && IsValid(defenseUpgradeTree[row].row[col].spawnedUpgrade))
+			{
+				deltaStats += defenseUpgradeTree[row].row[col].spawnedUpgrade->stats;
+			}
+		}
+	}
+	//utility tree
+	for (int32 row = 0; row < utilityUpgradeTree.Num(); row++)
+	{
+		for (int32 col = 0; col < utilityUpgradeTree[row].row.Num(); col++)
+		{
+			if (utilityUpgradeTree[row].row[col].bIsUpgradeActive && IsValid(utilityUpgradeTree[row].row[col].spawnedUpgrade))
+			{
+				deltaStats += utilityUpgradeTree[row].row[col].spawnedUpgrade->stats;
+			}
+		}
+	}
+
+	return deltaStats;
 }

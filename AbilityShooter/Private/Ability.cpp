@@ -437,8 +437,16 @@ void AAbility::SetupAbility(AAbilityShooterCharacter* newOwner)
 
 	if (IsValid(characterOwner))
 	{
-		characterOwner->OnShooterDamaged.AddDynamic(this, &AAbility::OnOwnerDamaged);
-		characterOwner->OnShooterDealtDamage.AddDynamic(this, &AAbility::OnOwnerDealtDamage);
+		//characterOwner->OnShooterDamaged.BindDynamic(this, &AAbility::OnOwnerDamaged);
+		//characterOwner->OnShooterDealtDamage.BindDynamic(this, &AAbility::OnOwnerDealtDamage);
+
+		FShooterDamagedDelegate damageEvent;
+		damageEvent.BindUObject(this, &AAbility::OnOwnerDamaged);
+		characterOwner->OnShooterDamagedEvents.Add(damageEvent);
+
+		FShooterDealtDamageDelegate damagedEvent;
+		damagedEvent.BindUObject(this, &AAbility::OnOwnerDealtDamage);
+		characterOwner->OnShooterDealtDamageEvents.Add(damagedEvent);
 	}
 	
 	DetermineState();
@@ -700,6 +708,35 @@ bool AAbility::CanHurtCharacter(AAbilityShooterCharacter* testCharacter) const
 		return false;
 	
 	return IsValid(gm) ? gm->CanDealDamage(Cast<AASPlayerState>(characterOwner->PlayerState), Cast<AASPlayerState>(testCharacter->PlayerState)) : false;
+}
+
+void AAbility::GetAreaOfEffect(const FVector& sphereCenter, const float sphereRadius, TArray<AAbilityShooterCharacter*>& outList, bool bFindEnemies /* = true */, bool bFindSelf /* = false */)
+{
+	outList.Empty(); //clear the array
+
+	TArray<FHitResult> sweepResults;
+	const FVector end = sphereCenter + FVector(0.f, 0.f, 5.0f);
+
+	GetWorld()->SweepMultiByChannel(sweepResults, sphereCenter, end, FRotator::ZeroRotator.Quaternion(), ECC_Pawn, FCollisionShape::MakeSphere(sphereRadius));
+
+	for (FHitResult hit : sweepResults)
+	{
+		AAbilityShooterCharacter* gc = Cast<AAbilityShooterCharacter>(hit.GetActor());
+		//add character we're interested in
+		if (IsValid(gc) && gc->IsAlive())
+		{
+			//go to the next one if we foaund the character owner and we're not supposed to return them
+			if (!bFindSelf && gc == characterOwner)
+				continue;
+
+			bool bCanHurt = CanHurtCharacter(gc);
+			
+			if (bCanHurt == bFindEnemies)
+			{
+				outList.AddUnique(gc);
+			}
+		}
+	}
 }
 
 void AAbility::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const

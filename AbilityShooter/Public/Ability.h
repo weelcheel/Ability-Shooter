@@ -17,7 +17,7 @@ enum class EAbilityState : uint8
 	MAX
 };
 
-UCLASS()
+UCLASS(Blueprintable)
 class AAbility : public AShooterItem
 {
 	friend class AAbilityShooterCharacter;
@@ -302,6 +302,10 @@ public:
 	/* set whether or not this ability is disabeld */
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void SetDisabled(bool bDisabled = false);
+
+	/* determines an area of effect. given a location and a radius, this function returns a list of characters that would be relevant to the supplied info */
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	void GetAreaOfEffect(const FVector& sphereCenter, const float sphereRadius, TArray<AAbilityShooterCharacter*>& outList, bool bFindEnemies = true, bool bFindSelf = false);
 
 	/* gets the Ability state */
 	UFUNCTION(BlueprintCallable, Category = Ability)

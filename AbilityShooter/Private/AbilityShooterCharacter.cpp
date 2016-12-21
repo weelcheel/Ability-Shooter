@@ -93,6 +93,8 @@ void AAbilityShooterCharacter::PostInitializeComponents()
 		if (IsValid(respawnSound))
 			UGameplayStatics::PlaySoundAtLocation(this, respawnSound, GetActorLocation());
 	}
+
+	aboveHeadWidget->GetUserWidgetObject()->SetVisibility(ESlateVisibility::Hidden);
 }
 
 void AAbilityShooterCharacter::Destroyed()
@@ -139,7 +141,11 @@ void AAbilityShooterCharacter::Tick(float DeltaSeconds)
 
 		if (IsValid(hit.GetActor()) && hit.GetActor()->Tags.Contains(TEXT("usable")))
 			newUseObject = hit.GetActor();
-		else if (IsValid(hit.GetActor()) && hit.GetActor()->IsA(AAbilityShooterCharacter::StaticClass()))
+
+		const FVector end2 = start + dir * (dist + 5150.f);
+		GetWorld()->LineTraceSingleByChannel(hit, start, end2, ECC_WorldStatic, params);
+
+		if (IsValid(hit.GetActor()) && hit.GetActor()->IsA(AAbilityShooterCharacter::StaticClass()) && Cast<AAbilityShooterCharacter>(hit.GetActor())->IsAlive())
 		{
 			APlayerController* pc = Cast<APlayerController>(GetController());
 			if (IsValid(pc))
@@ -349,6 +355,9 @@ void AAbilityShooterCharacter::AddEquipment(AEquipmentItem* item)
 	{
 		item->OnEnterInventory(this);
 		equipmentInventory.AddUnique(item);
+
+		if (!IsValid(currentEquipment))
+			EquipEquipment(item);
 	}
 }
 
@@ -543,15 +552,46 @@ float AAbilityShooterCharacter::TakeDamage(float Damage, FDamageEvent const & Da
 	shooterDamage.EventInstigator = EventInstigator;
 	shooterDamage.DamageCauser = DamageCauser;
 
-	OnShooterDamaged.Broadcast(shooterDamage);
+	/*if (OnShooterDamaged.IsBound())
+		OnShooterDamaged.Execute(shooterDamage, Damage);*/
 
+	//go through and let the OnShooterDamaged delegates modify the damage
+	for (int32 i = 0; i < OnShooterDamagedEvents.Num(); i++)
+	{
+		if (OnShooterDamagedEvents[i].IsBound())
+		{
+			OnShooterDamagedEvents[i].Execute(shooterDamage, Damage, Damage);
+		}
+		else
+			OnShooterDamagedEvents.RemoveAt(i);
+	}
+
+	//go through and let the OnShooterDealtDamaged delegates modify the damage
 	AAbilityShooterPlayerController* pc = Cast<AAbilityShooterPlayerController>(EventInstigator);
 	if (IsValid(pc))
 	{
 		AAbilityShooterCharacter* damagingShooter = Cast<AAbilityShooterCharacter>(pc->GetCharacter());
-		if (IsValid(damagingShooter) && damagingShooter->IsAlive())
-			damagingShooter->OnShooterDealtDamage.Broadcast(shooterDamage, this);
+		if (IsValid(damagingShooter))
+		{
+			for (int32 i = 0; i < damagingShooter->OnShooterDealtDamageEvents.Num(); i++)
+			{
+				if (damagingShooter->OnShooterDealtDamageEvents[i].IsBound())
+				{
+					damagingShooter->OnShooterDealtDamageEvents[i].Execute(shooterDamage, this, Damage, Damage);
+				}
+				else
+					damagingShooter->OnShooterDealtDamageEvents.RemoveAt(i);
+			}
+		}
 	}
+
+	/*AAbilityShooterPlayerController* pc = Cast<AAbilityShooterPlayerController>(EventInstigator);
+	if (IsValid(pc))
+	{
+		AAbilityShooterCharacter* damagingShooter = Cast<AAbilityShooterCharacter>(pc->GetCharacter());
+		if (IsValid(damagingShooter) && damagingShooter->IsAlive() && damagingShooter->OnShooterDealtDamage.IsBound())
+			damagingShooter->OnShooterDealtDamage.Execute(shooterDamage, this, Damage);
+	}*/
 
 	//@TODO: let the gametype modify the damage
 	//@TODO: let the stats then modify the damage
@@ -685,6 +725,10 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FDamageEvent const &
 
 		i--;
 	}
+
+	//end all ailments
+	EndCurrentAilment();
+	ailmentQueue.Empty();
 
 	//remove weapons from inventory
 	if (IsValid(currentEquipment))
@@ -1102,7 +1146,7 @@ float AAbilityShooterCharacter::GetCurrentStat(EStat stat) const
 	//next let outfits change the stats
 	if (IsValid(currentOutfit) && IsValid(statsManager))
 	{
-		statDelta = statsManager->GetStatFromBaseStatAddition(statDelta, stat, currentOutfit->stats);
+		statDelta = statsManager->GetStatFromBaseStatAddition(statDelta, stat, currentOutfit->GetDeltaStats());
 	}
 
 	switch (stat)
@@ -1152,6 +1196,9 @@ float AAbilityShooterCharacter::GetCurrentStat(EStat stat) const
 
 void AAbilityShooterCharacter::ApplyAilment_Implementation(const FAilmentInfo& info)
 {
+	if (!IsAlive())
+		return;
+
 	if (currentAilment.type != EAilment::AL_None)
 	{
 		ailmentQueue.Enqueue(info);
@@ -1174,12 +1221,23 @@ void AAbilityShooterCharacter::ApplyAilment_Implementation(const FAilmentInfo& i
 			pc->SetIgnoreMoveInput(true);
 		break;
 	case EAilment::AL_Stun:
-		GetCharacterMovement()->DisableMovement();
+		if (IsValid(pc))
+			pc->SetIgnoreMoveInput(true);
 		break;
 	}
 
 	if (currentAilment.duration > 0.f)
+	{
 		GetWorldTimerManager().SetTimer(ailmentTimer, this, &AAbilityShooterCharacter::EndCurrentAilment, currentAilment.duration);
+
+		//attach an emitter for this ailment
+		currentAilment.psComponent = UGameplayStatics::SpawnEmitterAttached(info.fx, GetRootComponent(), NAME_None, FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 25.f), FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset, true);
+		if (IsValid(currentAilment.psComponent))
+		{
+			currentAilment.psComponent->SetFloatParameter(TEXT("lifetime"), info.duration);
+			currentAilment.psComponent->Activate(true);
+		}
+	}
 
 	SendInterruptToAbilities(EAbilityInterruptSignal::AilmentAcquired);
 }
@@ -1191,6 +1249,12 @@ FAilmentInfo AAbilityShooterCharacter::GetCurrentAilment() const
 
 void AAbilityShooterCharacter::EndCurrentAilment()
 {
+	//clear particle effects if ending early
+	if (GetWorldTimerManager().GetTimerRemaining(ailmentTimer) > 0.f && IsValid(currentAilment.psComponent))
+	{
+		currentAilment.psComponent->Deactivate();
+		currentAilment.psComponent = nullptr;
+	}
 	GetWorldTimerManager().ClearTimer(ailmentTimer);
 
 	FAilmentInfo nextAilment;
@@ -1351,9 +1415,9 @@ void AAbilityShooterCharacter::SetEffectStacks_Implementation(const FString& key
 	}
 }
 
-void AAbilityShooterCharacter::UpgradeOutfit_Implementation(uint8 tree, uint8 row, uint8 col)
+void AAbilityShooterCharacter::UpgradeOutfit(uint8 tree, uint8 row, uint8 col)
 {
-	if (IsValid(currentOutfit))
+	if (IsValid(currentOutfit) && HasAuthority())
 		currentOutfit->Upgrade(tree, row, col);
 }
 

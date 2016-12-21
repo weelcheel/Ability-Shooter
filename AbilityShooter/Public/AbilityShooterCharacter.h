@@ -20,9 +20,9 @@ class AEquipmentItem;
 class AAbility;
 class AASPlayerState;
 
-/* Shooter damage event declaration */
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FShooterDamagedDelegate, FShooterDamage, damageInfo);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FShooterDealtDamageDelegate, FShooterDamage, damageInfo, AAbilityShooterCharacter*, damagedCharacter);
+/* Shooter damage event declaration, declaring the same variables in different ways since blueprints wants to be a pain in the ass and only let references be return params */
+DECLARE_DELEGATE_ThreeParams(FShooterDamagedDelegate, FShooterDamage, float, float&);
+DECLARE_DELEGATE_FourParams(FShooterDealtDamageDelegate, FShooterDamage, AAbilityShooterCharacter*, float, float&);
 
 /* types for hard Crowd Control (Ailments) */
 UENUM(BlueprintType)
@@ -66,6 +66,9 @@ struct FAilmentInfo
 	/* particle system associated with this CC */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ailment)
 	UParticleSystem* fx;
+
+	/* spawned particle effect for this ailment */
+	UParticleSystemComponent* psComponent;
 
 	FAilmentInfo()
 	{
@@ -145,13 +148,11 @@ public:
 
 	/* --EVENT DELEGATES --------------------------------------------------------*/
 
-	/* delegate to handle shooter damage events */
-	UPROPERTY(BlueprintAssignable)
-	FShooterDamagedDelegate OnShooterDamaged;
+	/* delegates to handle shooter damage events */
+	TArray<FShooterDamagedDelegate> OnShooterDamagedEvents;
 
 	/* delegate to handle when this shooter deals damage */
-	UPROPERTY(BlueprintAssignable)
-	FShooterDealtDamageDelegate OnShooterDealtDamage;
+	TArray<FShooterDealtDamageDelegate> OnShooterDealtDamageEvents;
 
 protected:
 
@@ -549,7 +550,7 @@ public:
 	void EquipOutfit(AOutfit* newOutfit);
 
 	/* upgrade the outfit across all clients */
-	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Outfit)
+	UFUNCTION(BlueprintCallable, Category = Outfit)
 	void UpgradeOutfit(uint8 tree, uint8 row, uint8 col);
 
 	/* gets the replicated rotator before we try other methods */

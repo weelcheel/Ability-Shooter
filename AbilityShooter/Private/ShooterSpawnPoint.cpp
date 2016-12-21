@@ -29,7 +29,10 @@ float AShooterSpawnPoint::GetSpawnScoreForPlayer(AASPlayerState* player) const
 			AASPlayerState* otherState = Cast<AASPlayerState>(pc->PlayerState);
 			if (IsValid(otherState))
 			{
-				if (otherState->GetTeamIndex() == player->GetTeamIndex())
+				int32 thisTeam = player->GetTeamIndex();
+				int32 otherTeam = otherState->GetTeamIndex();
+
+				if (thisTeam == otherTeam)
 					score += (1 - ((distance - GetCapsuleComponent()->GetScaledCapsuleRadius()) / (scoreRange - GetCapsuleComponent()->GetScaledCapsuleRadius())));
 				else
 					score -= (1 - ((distance - GetCapsuleComponent()->GetScaledCapsuleRadius()) / (scoreRange - GetCapsuleComponent()->GetScaledCapsuleRadius())));
@@ -39,5 +42,11 @@ float AShooterSpawnPoint::GetSpawnScoreForPlayer(AASPlayerState* player) const
 		}
 	}
 
-	return scoreCount > 0 ? score / scoreCount : 0.f;
+
+	float avgScore;
+	if (scoreCount > 0)
+		avgScore = score / scoreCount;
+	else
+		avgScore = 0.f;
+	return avgScore;
 }

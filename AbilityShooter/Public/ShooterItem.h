@@ -28,11 +28,11 @@ protected:
 
 	/* whenever the owner takes damage */
 	UFUNCTION(BlueprintImplementableEvent, Category = Damage)
-	void OnOwnerDamaged(FShooterDamage damage);
+	void OnOwnerDamaged(FShooterDamage damage, float dmgIn, float& dmgOut);
 
 	/* whenever the owner deals damage */
 	UFUNCTION(BlueprintImplementableEvent, Category = Damage)
-	void OnOwnerDealtDamage(FShooterDamage damage, AAbilityShooterCharacter* damagedCharacter);
+	void OnOwnerDealtDamage(FShooterDamage damage, AAbilityShooterCharacter* damagedCharacter, float dmgIn, float& dmgOut);
 
 public:
 	AShooterItem();

@@ -25,8 +25,8 @@ protected:
 	/* assign the player a team */
 	virtual void PostLogin(APlayerController* newPlayer) override;
 
-	/* finds the best spawn point including teams */
-	virtual AActor* FindBestShooterSpawn(class AController* player) override;
+	/* setup the teams array */
+	virtual void BeginPlay() override;
 
 public:
 	ATeamGameMode();

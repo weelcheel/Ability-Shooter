@@ -5,6 +5,13 @@
 
 ATeamGameMode::ATeamGameMode()
 {
+	
+}
+
+void ATeamGameMode::BeginPlay()
+{
+	Super::BeginPlay();
+
 	for (int32 i = 0; i < teamCount; i++)
 		numTeamPlayers.Add(0);
 }
@@ -21,8 +28,6 @@ void ATeamGameMode::PostLogin(APlayerController* newPlayer)
 {
 	if (!IsValid(newPlayer))
 		return;
-
-	Super::PostLogin(newPlayer);
 
 	AASPlayerState* ps = Cast<AASPlayerState>(newPlayer->PlayerState);
 	if (IsValid(ps))
@@ -55,35 +60,19 @@ void ATeamGameMode::PostLogin(APlayerController* newPlayer)
 				teamIndex = smallestTeams[0];
 			else if (smallestTeams.Num() > 1)
 				teamIndex = smallestTeams[FMath::RandHelper(smallestTeams.Num() - 1)];
+			
 		}
 
 		//error if the team index is still not assigned
 		if (teamIndex < 0)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("Team index failed to be assigned."));
+			return;
 		}
-	}
-}
 
-AActor* ATeamGameMode::FindBestShooterSpawn(class AController* player)
-{
-	TArray<FSpawnPointEntry> spawns;
-
-	for (TObjectIterator<AShooterSpawnPoint> itr; itr; ++itr)
-	{
-		AShooterSpawnPoint* spawn = (*itr);
-		if (IsValid(spawn))
-		{
-			FSpawnPointEntry spawnEntry;
-			spawnEntry.spawn = spawn;
-			spawnEntry.score = spawn->GetSpawnScoreForPlayer(Cast<AASPlayerState>(player->PlayerState));
-
-			spawns.Add(spawnEntry);
-		}
+		ps->SetTeamIndex(teamIndex);
+		numTeamPlayers[teamIndex]++;
 	}
 
-	spawns.Sort();
-
-	//there are teams so return the spawn point with the highest score
-	return spawns.Num() > 0 ? spawns[spawns.Num()-1].spawn : nullptr;
+	Super::PostLogin(newPlayer);
 }

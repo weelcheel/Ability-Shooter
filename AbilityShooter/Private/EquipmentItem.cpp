@@ -79,8 +79,16 @@ void AEquipmentItem::OnEquip(const AEquipmentItem* lastItem)
 
 	if (IsValid(characterOwner))
 	{
-		characterOwner->OnShooterDamaged.AddDynamic(this, &AEquipmentItem::OnOwnerDamaged);
-		characterOwner->OnShooterDealtDamage.AddDynamic(this, &AEquipmentItem::OnOwnerDealtDamage);
+		//characterOwner->OnShooterDamaged.BindDynamic(this, &AEquipmentItem::OnOwnerDamaged);
+		//characterOwner->OnShooterDealtDamage.BindDynamic(this, &AEquipmentItem::OnOwnerDealtDamage);
+
+		FShooterDamagedDelegate damageEvent;
+		damageEvent.BindUObject(this, &AEquipmentItem::OnOwnerDamaged);
+		characterOwner->OnShooterDamagedEvents.Add(damageEvent);
+
+		FShooterDealtDamageDelegate damagedEvent;
+		damagedEvent.BindUObject(this, &AEquipmentItem::OnOwnerDealtDamage);
+		characterOwner->OnShooterDealtDamageEvents.Add(damagedEvent);
 	}
 }
 
@@ -110,8 +118,8 @@ void AEquipmentItem::OnUnEquip()
 
 	if (IsValid(characterOwner))
 	{
-		characterOwner->OnShooterDamaged.RemoveAll(this);
-		characterOwner->OnShooterDealtDamage.RemoveAll(this);
+		//characterOwner->OnShooterDamaged.RemoveAll(this);
+		//characterOwner->OnShooterDealtDamage.RemoveAll(this);
 	}
 
 	DetermineEquipmentState();

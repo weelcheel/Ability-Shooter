@@ -12,6 +12,8 @@ class AOutfit;
 UCLASS(ABSTRACT, Blueprintable)
 class AOutfitUpgrade : public AShooterItem
 {
+	friend class AOutfit;
+
 	GENERATED_BODY()
 
 protected:

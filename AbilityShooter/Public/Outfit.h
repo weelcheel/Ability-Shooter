@@ -88,4 +88,7 @@ public:
 
 	/* upgrade the outfit */
 	void Upgrade(uint8 tree, uint8 row, uint8 col);
+
+	/* generate a stats struct that includes delta stats of this outfit and all of its activated upgrades */
+	FBaseStats GetDeltaStats();
 };

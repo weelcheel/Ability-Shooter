@@ -163,7 +163,7 @@ AActor* AAbilityShooterGameMode::FindBestShooterSpawn(class AController* player)
 	spawns.Sort();
 
 	//there are no teams so return the spawn point with the lowest score since every player will add score to the spawn point
-	return spawns.Num() > 0 ? spawns[0].spawn : nullptr;
+	return spawns.Num() > 0 ? spawns[spawns.Num() - 1].spawn : nullptr;
 }
 
 void AAbilityShooterGameMode::ShooterKilled(AController* Killer, AController* KilledPlayer, APawn* KilledPawn, const UDamageType* DamageType)

@@ -182,7 +182,7 @@ bool AAbilityAIController::HasEquipmentLOSToTarget(AActor* InEnemyActor, const b
 
 	FHitResult Hit(ForceInit);
 	const FVector EndLocation = InEnemyActor->GetActorLocation();
-	GetWorld()->LineTraceSingleByChannel(Hit, StartLocation, EndLocation, COLLISION_WEAPON, TraceParams);
+	GetWorld()->LineTraceSingleByChannel(Hit, StartLocation, EndLocation, ECC_Visibility, TraceParams);
 	if (Hit.bBlockingHit == true)
 	{
 		// Theres a blocking hit - check if its our enemy actor

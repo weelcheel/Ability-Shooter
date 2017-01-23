@@ -375,7 +375,7 @@ void AEquipmentItem::OnBurstStarted()
 
 void AEquipmentItem::OnBurstFinished()
 {
-	if (!bIsAltActive)
+	if (!bIsAltActive && IsValid(characterOwner))
 	{
 		characterOwner->GetFollowCamera()->bUsePawnControlRotation = false;
 		characterOwner->bUseControllerRotationYaw = false;

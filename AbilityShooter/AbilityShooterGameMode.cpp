@@ -7,6 +7,9 @@
 #include "ASPlayerState.h"
 #include "PlayerHUD.h"
 #include "ShooterSpawnPoint.h"
+#include "Camera/CameraActor.h"
+#include "AbilityShooterGameState.h"
+#include "AbilityAIController.h"
 
 AAbilityShooterGameMode::AAbilityShooterGameMode()
 {
@@ -20,9 +23,13 @@ AAbilityShooterGameMode::AAbilityShooterGameMode()
 	PlayerControllerClass = AAbilityShooterPlayerController::StaticClass();
 	PlayerStateClass = AASPlayerState::StaticClass();
 	HUDClass = APlayerHUD::StaticClass();
+	GameStateClass = AAbilityShooterGameState::StaticClass();
+	aiShooterBotClass = AAbilityShooterBot::StaticClass();
 
 	basePlayerRespawnTime = 10.f;
 	maxNumPlayers = 5;
+
+	bDelayedStart = true;
 }
 
 void AAbilityShooterGameMode::PreLogin(const FString& Options, const FString& Address, const TSharedPtr<const FUniqueNetId>& UniqueId, FString& ErrorMessage)
@@ -87,7 +94,12 @@ void AAbilityShooterGameMode::RestartPlayer(class AController* NewPlayer)
 		}
 	}
 	// try to create a pawn to use of the default class for this player
-	if (NewPlayer->GetPawn() == NULL && GetDefaultPawnClassForController(NewPlayer) != NULL)
+	if (NewPlayer->GetPawn() == NULL && NewPlayer->GetClass()->IsChildOf(AAbilityAIController::StaticClass()))
+	{
+		AAbilityShooterBot* bot = GetWorld()->SpawnActor<AAbilityShooterBot>(aiShooterBotClass, StartSpot->GetActorLocation(), StartSpot->GetActorRotation());
+		NewPlayer->SetPawn(bot);
+	}
+	else if (NewPlayer->GetPawn() == NULL && GetDefaultPawnClassForController(NewPlayer) != NULL)
 	{
 		NewPlayer->SetPawn(SpawnDefaultPawnFor(NewPlayer, StartSpot));
 	}
@@ -100,6 +112,8 @@ void AAbilityShooterGameMode::RestartPlayer(class AController* NewPlayer)
 	{
 		// initialize and start it up
 		InitStartSpot(StartSpot, NewPlayer);
+
+		NewPlayer->StartSpot = StartSpot;
 
 		// @todo: this was related to speedhack code, which is disabled.
 		/*
@@ -163,16 +177,39 @@ AActor* AAbilityShooterGameMode::FindBestShooterSpawn(class AController* player)
 	spawns.Sort();
 
 	//there are no teams so return the spawn point with the lowest score since every player will add score to the spawn point
-	return spawns.Num() > 0 ? spawns[spawns.Num() - 1].spawn : nullptr;
+	return spawns.Num() > 0 ? spawns[0].spawn : nullptr;
 }
 
-void AAbilityShooterGameMode::ShooterKilled(AController* Killer, AController* KilledPlayer, APawn* KilledPawn, const UDamageType* DamageType)
+void AAbilityShooterGameMode::ShooterKilled(AController* Killer, AController* KilledPlayer, APawn* KilledPawn, const UDamageType* DamageType, AShooterItem* killingItem)
 {
-	//@TODO: notify player states about Shooter deaths
 
 	AAbilityShooterPlayerController* respawningPlayer = Cast<AAbilityShooterPlayerController>(KilledPlayer);
 	if (IsValid(respawningPlayer))
 		respawningPlayer->SetRespawnTimer(GetRespawnTime(respawningPlayer));
+
+	//reward killer with cash
+	if (IsValid(Killer))
+	{
+		AASPlayerState* killerPS = Cast<AASPlayerState>(Killer->PlayerState);
+		if (IsValid(killerPS))
+		{
+			int32 reward = baseCashPerKill;
+			ModifyKillReward(reward);
+
+			killerPS->cash += reward;
+		}
+	}
+
+	//@TODO: notify player states about Shooter deaths
+	if (IsValid(GameState) && IsValid(Killer) && IsValid(KilledPlayer))
+	{
+		AASPlayerState* killerState = Cast<AASPlayerState>(Killer->PlayerState);
+		AASPlayerState* victimState = Cast<AASPlayerState>(KilledPlayer->PlayerState);
+
+		AASPlayerState* ps = IsValid(killerState) ? killerState : victimState;
+		if (IsValid(ps))
+			ps->BroadcastKillToHUD(killerState, killingItem, victimState);
+	}
 }
 
 float AAbilityShooterGameMode::GetRespawnTime(AController* player) const
@@ -186,4 +223,86 @@ float AAbilityShooterGameMode::GetRespawnTime(AController* player) const
 bool AAbilityShooterGameMode::CanDealDamage(AASPlayerState* damageInstigator, AASPlayerState* damagedPlayer) const
 {
 	return true;
+}
+
+void AAbilityShooterGameMode::ModifyKillReward(int32& cashReward)
+{
+	
+}
+
+void AAbilityShooterGameMode::StartMatch()
+{
+	Super::StartMatch();
+
+	AAbilityShooterGameState* gs = Cast<AAbilityShooterGameState>(GameState);
+	if (IsValid(gs))
+	{
+		int32 numBots = gs->numOfBots;
+		for (int32 i = 0; i < numBots; i++)
+		{
+			AAbilityAIController* ai = GetWorld()->SpawnActor<AAbilityAIController>(AAbilityAIController::StaticClass());
+			AASPlayerState* ps = Cast<AASPlayerState>(ai->PlayerState);
+			if (!IsValid(ps))
+			{
+				ps = GetWorld()->SpawnActor<AASPlayerState>(AASPlayerState::StaticClass());
+				ai->PlayerState = ps;
+			}
+
+			ps->SetPlayerName("Bot " + (i + 1));
+
+			GameState->PlayerArray.AddUnique(ps);
+
+			RestartPlayer(ai);
+		}
+	}
+}
+
+void AAbilityShooterGameMode::EndMatch()
+{
+	Super::EndMatch();
+
+	//@TODO: generate end game stats
+	DecideWinner();
+
+	//clear all timers
+	GetWorldTimerManager().ClearAllTimersForObject(this);
+
+	//tell all players to depossess their pawns and set their view targets to the end game camera
+
+	//find the endgame camera
+	ACameraActor* camera = nullptr;
+	for (TActorIterator<ACameraActor> camitr(GetWorld()); camitr; ++camitr)
+	{
+		camera = *camitr;
+		for (int32 i = 0; i < camera->Tags.Num(); i++)
+		{
+			FName tag = TEXT("endgame");
+			if (camera->Tags[i] == tag)
+				break;
+
+			camera = nullptr;
+		}
+
+		if (camera != nullptr)
+			break;
+	}
+
+	for (TActorIterator<APlayerController> pcitr(GetWorld()); pcitr; ++pcitr)
+	{
+		//set this player's view target
+		APlayerController* pc = *pcitr;
+
+		if (camera != nullptr)
+			pc->ClientSetViewTarget(camera);
+
+		if (IsValid(pc->GetPawn()))
+		{
+			pc->GetPawn()->Destroy();
+		}
+	}
+}
+
+int32 AAbilityShooterGameMode::DecideWinner()
+{
+	return 0;
 }

@@ -12,6 +12,7 @@ enum class EAbilityState : uint8
 	NoOwner,
 	Idle,
 	OnCooldown,
+	Paused,
 	Aiming,
 	Performing,
 	MAX
@@ -131,6 +132,10 @@ protected:
 	/* timer for execution */
 	FTimerHandle executionTimer;
 
+	/* deal damage to an enemy */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = Ability)
+	void DealDamage(AActor* target, float Damage, const FHitResult& hitInfo, TSubclassOf<UDamageType> damageType, AController * EventInstigator, AActor * DamageCauser);
+
 	/* blueprint hooks for unique logic */
 	UFUNCTION(BlueprintImplementableEvent, Category = Ability)
 	void Perform();
@@ -227,6 +232,9 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	bool CanHurtCharacter(AAbilityShooterCharacter* testCharacter) const;
 
+	/* what happens when an ability pause ends */
+	void OnPauseEnd();
+
 	UFUNCTION()
 	void OnRep_CharacterOwner();
 
@@ -298,6 +306,10 @@ public:
 	/* end this ability to stop performing on all clients and server */
 	UFUNCTION(NetMulticast, reliable, BlueprintCallable, Category = Ability)
 	void StopAbility();
+		
+	/* use an ability pause when you want to put the ability on a short 'cooldown' while performing */
+	UFUNCTION(NetMulticast, reliable, BlueprintCallable, Category = Ability)
+	void PauseAbility(float pauseDuration);
 
 	/* set whether or not this ability is disabeld */
 	UFUNCTION(BlueprintCallable, Category = Ability)

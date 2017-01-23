@@ -2,7 +2,8 @@
 #include "AbilityShooterBot.h"
 #include "AbilityAIController.h"
 
-AAbilityShooterBot::AAbilityShooterBot()
+AAbilityShooterBot::AAbilityShooterBot(const FObjectInitializer& objectInitializer)
+:Super(objectInitializer)
 {
 	AIControllerClass = AAbilityAIController::StaticClass();
 }

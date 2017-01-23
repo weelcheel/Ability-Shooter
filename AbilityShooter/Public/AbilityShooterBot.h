@@ -9,7 +9,7 @@ class AAbilityShooterBot : public AAbilityShooterCharacter
 	GENERATED_BODY()
 
 public:
-	AAbilityShooterBot();
+	AAbilityShooterBot(const FObjectInitializer& objectInitializer);
 
 	UPROPERTY(EditAnywhere, Category = Behavior)
 	class UBehaviorTree* BotBehavior;

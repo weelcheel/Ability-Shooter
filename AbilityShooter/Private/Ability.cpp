@@ -6,6 +6,7 @@
 #include "UnrealNetwork.h"
 #include "AbilityShooterGameMode.h"
 #include "ASPlayerState.h"
+#include "ShooterDamage.h"
 
 AAbility::AAbility()
 {
@@ -38,7 +39,7 @@ AAbility::AAbility()
 
 bool AAbility::CanPerform() const
 {
-	bool bStateOK = !bIsDisabled && currentState != EAbilityState::NoOwner && currentState != EAbilityState::OnCooldown && IsValid(characterOwner) && characterOwner->CanPerformAbilities();
+	bool bStateOK = !bIsDisabled && currentState != EAbilityState::NoOwner && currentState != EAbilityState::OnCooldown && currentState != EAbilityState::Paused && IsValid(characterOwner) && characterOwner->CanPerformAbilities();
 	return bStateOK;
 }
 
@@ -49,7 +50,7 @@ void AAbility::StartPerform()
 		HandleInterrupt(EAbilityInterruptSignal::UserCancelled);
 		return;
 	}
-	else if (currentState == EAbilityState::OnCooldown || bIsDisabled || !characterOwner->CanPerformAbilities())
+	else if (currentState == EAbilityState::OnCooldown || currentState == EAbilityState::Paused || bIsDisabled || !characterOwner->CanPerformAbilities())
 		return;
 
 	if (Role < ROLE_Authority)
@@ -94,6 +95,22 @@ void AAbility::ConfirmAim()
 	}
 }
 
+void AAbility::DealDamage_Implementation(AActor* target, float Damage, const FHitResult& hitInfo, TSubclassOf<UDamageType> damageType, AController * EventInstigator, AActor * DamageCauser)
+{
+	FShooterDamage PointDmg;
+	PointDmg.DamageTypeClass = damageType ? damageType : UDamageType::StaticClass();
+	PointDmg.HitInfo = hitInfo;
+	PointDmg.PublicHitInfo = hitInfo;
+	PointDmg.ShotDirection = characterOwner ? characterOwner->GetBaseAimRotation().Vector() : FVector::ZeroVector;
+	PointDmg.Damage = Damage;
+	PointDmg.EventInstigator = characterOwner->GetController();
+	PointDmg.DamageCauser = this;
+
+	PointDmg.PublicDamage = PointDmg.Damage;
+
+	target->TakeDamage(PointDmg.Damage, PointDmg, characterOwner->GetController(), this);
+}
+
 void AAbility::ForceStopAbility_Implementation()
 {
 	//only force the stop if the ability is already performing
@@ -124,6 +141,22 @@ void AAbility::StopAbility_Implementation()
 		characterOwner->ForceEndCurrentAction();
 		GetWorldTimerManager().ClearTimer(executionTimer);
 	}
+}
+
+void AAbility::PauseAbility_Implementation(float pauseDuration)
+{
+	//only pause if the ability is already performing
+	if (currentState != EAbilityState::Performing)
+		return;
+
+	currentState = EAbilityState::Paused;
+
+	GetWorldTimerManager().SetTimer(cooldownTimer, this, &AAbility::OnPauseEnd, pauseDuration);
+}
+
+void AAbility::OnPauseEnd()
+{
+	currentState = EAbilityState::Performing;
 }
 
 bool AAbility::ServerStartPerform_Validate()
@@ -249,8 +282,8 @@ void AAbility::ContinueHandlePerform()
 		characterOwner->GetCharacterMovement()->bOrientRotationToMovement = false;
 	}
 
-	if (bIgnoreMovementWhilePerforming && IsValid(characterOwner))
-		characterOwner->GetCharacterMovement()->SetMovementMode(MOVE_None);
+	if (bIgnoreMovementWhilePerforming && IsValid(characterOwner) && IsValid(characterOwner->GetController()))
+		characterOwner->GetController()->SetIgnoreMoveInput(true);
 
 	if (GetNetMode() != NM_DedicatedServer)
 		StartPerformEffects();
@@ -315,8 +348,8 @@ void AAbility::OnStopPerform(bool bFromPerforming, bool bForcedStop)
 		}
 	}
 
-	if (bIgnoreMovementWhilePerforming && IsValid(characterOwner))
-		characterOwner->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	if ((bIgnoreMovementWhilePerforming && IsValid(characterOwner) && IsValid(characterOwner->GetController())))
+		characterOwner->GetController()->SetIgnoreMoveInput(false);
 
 	if (GetNetMode() != NM_DedicatedServer)
 		StopPerformEffects();
@@ -435,6 +468,7 @@ void AAbility::SetupAbility(AAbilityShooterCharacter* newOwner)
 		DetachFromActor(rules);
 	}
 
+	//set character owner event hooks
 	if (IsValid(characterOwner))
 	{
 		//characterOwner->OnShooterDamaged.BindDynamic(this, &AAbility::OnOwnerDamaged);
@@ -447,6 +481,14 @@ void AAbility::SetupAbility(AAbilityShooterCharacter* newOwner)
 		FShooterDealtDamageDelegate damagedEvent;
 		damagedEvent.BindUObject(this, &AAbility::OnOwnerDealtDamage);
 		characterOwner->OnShooterDealtDamageEvents.Add(damagedEvent);
+
+		if (IsValid(characterOwner->GetCapsuleComponent()))
+		{
+			characterOwner->GetCapsuleComponent()->OnComponentHit.AddDynamic(this, &AAbility::OnOwnerCollided);
+		}
+
+		characterOwner->OnShooterDashStarted.AddDynamic(this, &AAbility::OnOwnerDashStart);
+		characterOwner->OnShooterDashEnded.AddDynamic(this, &AAbility::OnOwnerDashEnd);
 	}
 	
 	DetermineState();
@@ -476,7 +518,7 @@ float AAbility::GetVeteranLevelScaledValue(TArray<float>& values) const
 
 float AAbility::GetCooldownProgressPercent() const
 {
-	if (currentState != EAbilityState::OnCooldown)
+	if (currentState != EAbilityState::OnCooldown && currentState != EAbilityState::Paused)
 		return 0.f;
 
 	float timeElapsed = GetWorldTimerManager().GetTimerElapsed(cooldownTimer);
@@ -487,7 +529,7 @@ float AAbility::GetCooldownProgressPercent() const
 
 float AAbility::GetCooldownRemaining() const
 {
-	if (currentState != EAbilityState::OnCooldown)
+	if (currentState != EAbilityState::OnCooldown && currentState != EAbilityState::Paused)
 		return 0.f;
 
 	return GetWorldTimerManager().GetTimerRemaining(cooldownTimer);

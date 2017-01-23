@@ -28,9 +28,15 @@ protected:
 	/* setup the teams array */
 	virtual void BeginPlay() override;
 
+	/* finds the best shooter spawn point for the player */
+	virtual AActor* FindBestShooterSpawn(class AController* player);
+
 public:
 	ATeamGameMode();
 
 	/* can one player state deal damage to another */
 	virtual bool CanDealDamage(AASPlayerState* damageInstigator, AASPlayerState* damagedPlayer) const;
+
+	/* handle new respawn algorithm */
+	virtual void RestartPlayer(class AController* NewPlayer) override;
 };

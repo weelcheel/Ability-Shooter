@@ -8,6 +8,7 @@ public class AbilityShooterTarget : TargetRules
 	public AbilityShooterTarget(TargetInfo Target)
 	{
 		Type = TargetType.Game;
+        bUsesSteam = true;
 	}
 
 	//

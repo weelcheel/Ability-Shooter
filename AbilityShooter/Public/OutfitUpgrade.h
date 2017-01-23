@@ -39,4 +39,7 @@ public:
 
 	/* called when this upgrade is activated */
 	void Activate(AAbilityShooterCharacter* upgrader, AOutfit* owningOutfit);
+
+	/* reactivate the upgrade to re add abilities and effects after the owning character has been reswpawned while owning the outfit */
+	void Reactivate(AAbilityShooterCharacter* upgrader, AOutfit* owningOutfit);
 };

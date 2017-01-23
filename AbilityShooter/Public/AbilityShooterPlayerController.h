@@ -10,6 +10,8 @@ struct FEffectInitInfo;
 struct FStoreItem;
 class AAbility;
 class UStatsManager;
+struct FPlayerServerInfo;
+class AOutfit;
 
 UCLASS()
 class AAbilityShooterPlayerController : public APlayerController
@@ -43,6 +45,9 @@ public:
 
 	/* caches the abilites the player has to give to the new character on spawn */
 	TArray<AAbility*> persistentAbilities;
+
+	/* caches the outfit so we can equip a respwaned shooter with it and all its upgrades */
+	AOutfit* persistentOutfit;
 
 	/* list of store items set by the game mode to sell to the player */
 	UPROPERTY(BlueprintReadOnly, replicated, Category = IngameStore)
@@ -93,4 +98,16 @@ public:
 	/** Set the control rotation. The RootComponent's rotation will also be updated to match it if RootComponent->bAbsoluteRotation is true. */
 	UFUNCTION(BlueprintCallable, Category = "Pawn", meta = (Tooltip = "Set the control rotation."))
 	virtual void SetControlRotation(const FRotator& NewRotation) override;
+
+	/* tell the player to show ui for profile creation */
+	UFUNCTION(BlueprintImplementableEvent, Category =UI)
+	void ShowNewProfileUI();
+
+	/* tell the player that the profile has been set and that its ok to show main menu */
+	UFUNCTION(BlueprintImplementableEvent, Category = UI)
+	void ShowMainMenuAfterProfileSet();
+
+	/* populate UI with player server information */
+	UFUNCTION(BlueprintImplementableEvent, Category = UI)
+	void PopulatePlayerServerList(const TArray<FPlayerServerInfo>& serverList);
 };

@@ -66,8 +66,11 @@ void AAbilityShooterPlayerController::HandleRespawnTimer()
 					ownedCharacter->AddExistingAbility(ability);
 				}
 
+				ownedCharacter->EquipOutfit(persistentOutfit, true);
+
 				persistentEffects.Empty();
 				persistentAbilities.Empty();
+				persistentOutfit = nullptr;
 			}
 		}
 	}
@@ -228,7 +231,11 @@ void AAbilityShooterPlayerController::ServerIngameStorePurchase_Implementation(F
 			}
 			else if (newItem->IsA(AAbility::StaticClass()))
 			{
-				currentCharacter->AddExistingAbility(Cast<AAbility>(newItem));
+				AAbility* abItem = Cast<AAbility>(newItem);
+				TSubclassOf<AAbility> abType = abItem->GetClass();
+
+				newItem->Destroy(true);
+				currentCharacter->AddAbility(abType);
 			}
 		}
 	}

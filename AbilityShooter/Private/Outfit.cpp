@@ -11,7 +11,7 @@ AOutfit::AOutfit()
 	stats.critRatio = 0.f;
 }
 
-void AOutfit::EquipOutfit(AAbilityShooterCharacter* character)
+void AOutfit::EquipOutfit(AAbilityShooterCharacter* character, bool bReactivate)
 {
 	owningCharacter = character;
 
@@ -34,11 +34,84 @@ void AOutfit::EquipOutfit(AAbilityShooterCharacter* character)
 		//owningCharacter->OnShooterDealtDamage.BindDynamic(this, &AOutfit::OnOwnerDealtDamage);
 	}
 
+	if (bReactivate)
+	{
+		for (int32 i = 0; i < offenseUpgradeTree.Num(); i++)
+		{
+			for (int32 j = 0; j < offenseUpgradeTree[i].row.Num(); j++)
+			{
+				if (offenseUpgradeTree[i].row[j].bIsUpgradeActive && IsValid(offenseUpgradeTree[i].row[j].spawnedUpgrade))
+					offenseUpgradeTree[i].row[j].spawnedUpgrade->Reactivate(owningCharacter, this);
+			}
+		}
+	}
+
 	OnEquipped(character);
 }
 
 void AOutfit::Upgrade(uint8 tree, uint8 row, uint8 col)
 {
+	//check other upgrades to see if this upgrade can be activated
+	//check to make sure no other upgrades in this row are active
+	switch (tree)
+	{
+	case 0:
+		for (int32 i = 0; i < offenseUpgradeTree[row].row.Num(); i++)
+		{
+			if (i != col && offenseUpgradeTree[row].row[i].bIsUpgradeActive)
+				return;
+		}
+		break;
+	case 1:
+		for (int32 i = 0; i < defenseUpgradeTree[row].row.Num(); i++)
+		{
+			if (i != col && defenseUpgradeTree[row].row[i].bIsUpgradeActive)
+				return;
+		}
+		break;
+	case 2:
+		for (int32 i = 0; i < utilityUpgradeTree[row].row.Num(); i++)
+		{
+			if (i != col && utilityUpgradeTree[row].row[i].bIsUpgradeActive)
+				return;
+		}
+		break;
+	}
+
+	//check to make sure the row before this one has an upgrade, unless the target row is the first row
+	if (row > 0)
+	{
+		bool bFoundUpgrade = false;
+		switch (tree)
+		{
+		case 0:
+			for (int32 i = 0; i < offenseUpgradeTree[row-1].row.Num(); i++)
+			{
+				if (offenseUpgradeTree[row-1].row[i].bIsUpgradeActive)
+					bFoundUpgrade = true;
+			}
+			break;
+		case 1:
+			for (int32 i = 0; i < defenseUpgradeTree[row-1].row.Num(); i++)
+			{
+				if (defenseUpgradeTree[row-1].row[i].bIsUpgradeActive)
+					bFoundUpgrade = true;
+			}
+			break;
+		case 2:
+			for (int32 i = 0; i < utilityUpgradeTree[row-1].row.Num(); i++)
+			{
+				if (utilityUpgradeTree[row-1].row[i].bIsUpgradeActive)
+					bFoundUpgrade = true;
+			}
+			break;
+		}
+
+		if (!bFoundUpgrade)
+			return;
+	}
+
+	//activate the upgrade
 	switch (tree)
 	{
 	case 0: //offense
@@ -50,6 +123,7 @@ void AOutfit::Upgrade(uint8 tree, uint8 row, uint8 col)
 				if (IsValid(offenseUpgradeTree[row].row[col].spawnedUpgrade))
 				{
 					offenseUpgradeTree[row].row[col].spawnedUpgrade->Activate(owningCharacter, this);
+					offenseUpgradeTree[row].row[col].bIsUpgradeActive = true;
 				}
 			}
 		}
@@ -63,6 +137,7 @@ void AOutfit::Upgrade(uint8 tree, uint8 row, uint8 col)
 				if (IsValid(defenseUpgradeTree[row].row[col].spawnedUpgrade))
 				{
 					defenseUpgradeTree[row].row[col].spawnedUpgrade->Activate(owningCharacter, this);
+					defenseUpgradeTree[row].row[col].bIsUpgradeActive = true;
 				}
 			}
 		}
@@ -76,6 +151,7 @@ void AOutfit::Upgrade(uint8 tree, uint8 row, uint8 col)
 				if (IsValid(utilityUpgradeTree[row].row[col].spawnedUpgrade))
 				{
 					utilityUpgradeTree[row].row[col].spawnedUpgrade->Activate(owningCharacter, this);
+					utilityUpgradeTree[row].row[col].bIsUpgradeActive = true;
 				}
 			}
 		}
@@ -87,7 +163,7 @@ FBaseStats AOutfit::GetDeltaStats()
 {
 	FBaseStats deltaStats = stats;
 	//offense upgrades
-	for (int32 row = 0; row < offenseUpgradeTree.Num(); row++)
+	/*for (int32 row = 0; row < offenseUpgradeTree.Num(); row++)
 	{
 		for (int32 col = 0; col < offenseUpgradeTree[row].row.Num(); col++)
 		{
@@ -118,7 +194,7 @@ FBaseStats AOutfit::GetDeltaStats()
 				deltaStats += utilityUpgradeTree[row].row[col].spawnedUpgrade->stats;
 			}
 		}
-	}
+	}*/
 
 	return deltaStats;
 }

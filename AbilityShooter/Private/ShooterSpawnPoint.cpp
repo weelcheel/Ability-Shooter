@@ -6,6 +6,11 @@
 AShooterSpawnPoint::AShooterSpawnPoint()
 {
 	scoreRange = 10000.f;
+	teamIndex = -1;
+
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	GetCapsuleComponent()->SetCollisionResponseToAllChannels(ECR_Ignore);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 }
 
 float AShooterSpawnPoint::GetSpawnScoreForPlayer(AASPlayerState* player) const
@@ -48,5 +53,12 @@ float AShooterSpawnPoint::GetSpawnScoreForPlayer(AASPlayerState* player) const
 		avgScore = score / scoreCount;
 	else
 		avgScore = 0.f;
+
+	TArray<AActor*> overlappingCharacters;
+	GetCapsuleComponent()->GetOverlappingActors(overlappingCharacters, AAbilityShooterCharacter::StaticClass());
+
+	if (overlappingCharacters.Num() > 0)
+		avgScore++;
+
 	return avgScore;
 }

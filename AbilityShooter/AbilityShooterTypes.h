@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ShooterDamage.h"
 #include "AbilityShooterTypes.generated.h"
 
 UENUM(BlueprintType)
@@ -60,6 +61,9 @@ private:
 	UPROPERTY()
 	FRadialDamageEvent RadialDamageEvent;
 
+	UPROPERTY()
+	FShooterDamage ShooterDamageEvent;
+
 public:
 	FTakeHitInfo()
 		: ActualDamage(0)
@@ -114,6 +118,16 @@ public:
 		}
 
 		DamageTypeClass = DamageEvent.DamageTypeClass;
+	}
+
+	void SetShooterDamage(const FShooterDamage& DamageEvent)
+	{
+		ShooterDamageEvent = DamageEvent;
+	}
+
+	FShooterDamage& GetShooterDamage()
+	{
+		return ShooterDamageEvent;
 	}
 
 	void EnsureReplication()

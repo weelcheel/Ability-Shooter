@@ -84,7 +84,7 @@ public:
 	FBaseStats stats;
 
 	/* called when the outfit is equipped to a Shooter */
-	void EquipOutfit(AAbilityShooterCharacter* character);
+	void EquipOutfit(AAbilityShooterCharacter* character, bool bReactivate = false);
 
 	/* upgrade the outfit */
 	void Upgrade(uint8 tree, uint8 row, uint8 col);

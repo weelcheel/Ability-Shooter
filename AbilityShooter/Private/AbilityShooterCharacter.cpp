@@ -10,11 +10,13 @@
 #include "BulletGunWeapon.h"
 #include "DrawDebugHelpers.h"
 #include "Ability.h"
+#include "AbilityShooterMovementComponent.h"
 
 //////////////////////////////////////////////////////////////////////////
 // AAbilityShooterCharacter
 
-AAbilityShooterCharacter::AAbilityShooterCharacter()
+AAbilityShooterCharacter::AAbilityShooterCharacter(const FObjectInitializer& objectInitializer)
+:Super(objectInitializer.SetDefaultSubobjectClass<UAbilityShooterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
@@ -25,7 +27,7 @@ AAbilityShooterCharacter::AAbilityShooterCharacter()
 	GetMesh()->SetCollisionResponseToChannel(COLLISION_PROJECTILE, ECR_Block);
 	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 
-	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Overlap);
 	GetCapsuleComponent()->SetCollisionResponseToChannel(COLLISION_PROJECTILE, ECR_Block);
 	GetCapsuleComponent()->SetCollisionResponseToChannel(COLLISION_WEAPON, ECR_Ignore);
 
@@ -68,6 +70,17 @@ AAbilityShooterCharacter::AAbilityShooterCharacter()
 	aboveHeadWidget->SetupAttachment(RootComponent, TEXT("hpbar"));
 	aboveHeadWidget->SetWidgetClass(aboveHeadWidgetClass);
 	aboveHeadWidget->SetDrawSize(FVector2D(0.f, 0.f));
+
+	//create the headshot collision capsule
+	headshotComponent = CreateDefaultSubobject<UCapsuleComponent>(TEXT("headshotCapsule"));
+	headshotComponent->SetupAttachment(GetMesh(), TEXT("headshot"));
+	headshotComponent->ComponentTags.Add(TEXT("headshot"));
+	headshotComponent->SetCapsuleHalfHeight(20.f);
+	headshotComponent->SetCapsuleRadius(15.f);
+	headshotComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+	headshotComponent->SetCollisionResponseToChannel(COLLISION_WEAPON, ECR_Block);
+
+	NetCullDistanceSquared = 2500000000.f;
 }
 
 void AAbilityShooterCharacter::PostInitializeComponents()
@@ -94,7 +107,8 @@ void AAbilityShooterCharacter::PostInitializeComponents()
 			UGameplayStatics::PlaySoundAtLocation(this, respawnSound, GetActorLocation());
 	}
 
-	aboveHeadWidget->GetUserWidgetObject()->SetVisibility(ESlateVisibility::Hidden);
+	if (IsValid(aboveHeadWidget) && IsValid(aboveHeadWidget->GetUserWidgetObject()))
+		aboveHeadWidget->GetUserWidgetObject()->SetVisibility(ESlateVisibility::Hidden);
 }
 
 void AAbilityShooterCharacter::Destroyed()
@@ -110,6 +124,15 @@ void AAbilityShooterCharacter::PawnClientRestart()
 
 	//reattach equipment if needed
 	SetCurrentEquipment(currentEquipment);
+
+	//notify the player HUD that the current effects have changed
+	APlayerController* pc = Cast<APlayerController>(GetController());
+	if (IsValid(pc))
+	{
+		APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
+		if (IsValid(hud))
+			hud->OnEffectsListUpdate();
+	}
 
 	//@TODO: set mesh team color material instance
 }
@@ -167,6 +190,15 @@ void AAbilityShooterCharacter::Tick(float DeltaSeconds)
 		}
 
 		currentUseObject = newUseObject;
+
+		//check for close camera
+		FVector camLoc = FollowCamera->GetComponentLocation();
+		float dSquared = (camLoc - GetActorLocation()).SizeSquared();
+
+		if (dSquared <= FMath::Square(115.f + GetCapsuleComponent()->GetScaledCapsuleRadius()) && IsValid(GetMesh()))
+			GetMesh()->SetHiddenInGame(true, false);
+		else if (IsValid(GetMesh()))
+			GetMesh()->SetHiddenInGame(false, false);
 	}
 }
 
@@ -189,7 +221,10 @@ void AAbilityShooterCharacter::AddAbility(TSubclassOf<AAbility> newType, bool bF
 	}
 
 	int selectedIndex = -1;
-	if (newType->GetDefaultObject<AAbility>()->bUltimateAbility)
+
+	AAbility* newAbDefault = Cast<AAbility>(newType->GetDefaultObject());
+
+	if (newAbDefault->bUltimateAbility)
 		selectedIndex = 2;
 	else
 	{
@@ -220,7 +255,7 @@ void AAbilityShooterCharacter::AddAbility(TSubclassOf<AAbility> newType, bool bF
 	}
 
 	//don't add if the Shooter already has an ultimate
-	if (newType->GetDefaultObject<AAbility>()->bUltimateAbility)
+	if (newAbDefault->bUltimateAbility)
 	{
 		for (AAbility* ability : abilities)
 		{
@@ -354,10 +389,13 @@ void AAbilityShooterCharacter::AddEquipment(AEquipmentItem* item)
 	if (IsValid(item) && Role == ROLE_Authority)
 	{
 		item->OnEnterInventory(this);
-		equipmentInventory.AddUnique(item);
+		int32 ind = equipmentInventory.AddUnique(item);
 
 		if (!IsValid(currentEquipment))
+		{
+			currentEquipmentIndex = ind;
 			EquipEquipment(item);
+		}
 	}
 }
 
@@ -392,12 +430,12 @@ void AAbilityShooterCharacter::EquipEquipment(AEquipmentItem* item)
 	}
 }
 
-void AAbilityShooterCharacter::EquipOutfit(AOutfit* newOutfit)
+void AAbilityShooterCharacter::EquipOutfit(AOutfit* newOutfit, bool bReactivate)
 {
 	if (IsValid(newOutfit))
 	{
 		currentOutfit = newOutfit;
-		currentOutfit->EquipOutfit(this);
+		currentOutfit->EquipOutfit(this, bReactivate);
 	}
 }
 
@@ -445,6 +483,11 @@ void AAbilityShooterCharacter::SetupPlayerInputComponent(class UInputComponent* 
 	InputComponent->BindAction("Use", IE_Pressed, this, &AAbilityShooterCharacter::OnUseObjectStart);
 	InputComponent->BindAction("Use", IE_Released, this, &AAbilityShooterCharacter::OnUseObjectStop);
 
+	//change equipment
+	InputComponent->BindAction("ProgressEquipWheelForward", IE_Pressed, this, &AAbilityShooterCharacter::OnProgressEquipWheelForward);
+	InputComponent->BindAction("ProgressEquipWheelBack", IE_Pressed, this, &AAbilityShooterCharacter::OnProgressEquipWheelBackward);
+	InputComponent->BindAction("CancelEquipWheel", IE_Pressed, this, &AAbilityShooterCharacter::EquipmentWheelTimedOut);
+
 	//ability interaction
 	InputComponent->BindAction("Ability1", IE_Pressed, this, &AAbilityShooterCharacter::UseAbilityStart<0>);
 	InputComponent->BindAction("Ability1", IE_Released, this, &AAbilityShooterCharacter::UseAbilityStop<0>);
@@ -462,11 +505,11 @@ void AAbilityShooterCharacter::SetupPlayerInputComponent(class UInputComponent* 
 	InputComponent->BindAction("Ability7", IE_Released, this, &AAbilityShooterCharacter::UseAbilityStop<6>);
 }
 
-void AAbilityShooterCharacter::ReplicateHit(float Damage, struct FDamageEvent const& DamageEvent, class APawn* PawnInstigator, class AActor* DamageCauser, bool bKilled)
+void AAbilityShooterCharacter::ReplicateHit(float Damage, struct FShooterDamage const& DamageEvent, class APawn* PawnInstigator, class AActor* DamageCauser, bool bKilled)
 {
 	const float TimeoutTime = GetWorld()->GetTimeSeconds() + 0.5f;
 
-	FDamageEvent const& LastDamageEvent = LastTakeHitInfo.GetDamageEvent();
+	FShooterDamage const& LastDamageEvent = LastTakeHitInfo.GetShooterDamage();
 	if ((PawnInstigator == LastTakeHitInfo.PawnInstigator.Get()) && (LastDamageEvent.DamageTypeClass == LastTakeHitInfo.DamageTypeClass) && (LastTakeHitTimeTimeout == TimeoutTime))
 	{
 		// same frame damage
@@ -483,14 +526,14 @@ void AAbilityShooterCharacter::ReplicateHit(float Damage, struct FDamageEvent co
 	LastTakeHitInfo.ActualDamage = Damage;
 	LastTakeHitInfo.PawnInstigator = Cast<AAbilityShooterCharacter>(PawnInstigator);
 	LastTakeHitInfo.DamageCauser = DamageCauser;
-	LastTakeHitInfo.SetDamageEvent(DamageEvent);
+	LastTakeHitInfo.SetShooterDamage(DamageEvent);
 	LastTakeHitInfo.bKilled = bKilled;
 	LastTakeHitInfo.EnsureReplication();
 
 	LastTakeHitTimeTimeout = TimeoutTime;
 }
 
-void AAbilityShooterCharacter::PlayHit(float DamageTaken, struct FDamageEvent const& DamageEvent, class APawn* PawnInstigator, class AActor* DamageCauser)
+void AAbilityShooterCharacter::PlayHit(float DamageTaken, struct FShooterDamage const& DamageEvent, class APawn* PawnInstigator, class AActor* DamageCauser)
 {
 	if (Role == ROLE_Authority)
 	{
@@ -527,14 +570,34 @@ void AAbilityShooterCharacter::PlayHit(float DamageTaken, struct FDamageEvent co
 			InstigatorHUD->NotifyEnemyHit();
 		}
 	}*/
+
+	//finally tell the UIs of both the damaging character and this character of this damage event
+	AAbilityShooterPlayerController* pc = Cast<AAbilityShooterPlayerController>(PawnInstigator->GetController());
+	if (pc)
+	{
+		APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
+		if (hud)
+		{
+			hud->OnCharacterDealtDamage(DamageEvent);
+		}
+	}
+	pc = Cast<AAbilityShooterPlayerController>(GetController());
+	if (pc)
+	{
+		APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
+		if (hud)
+		{
+			hud->OnCharacterDamaged(DamageEvent);
+		}
+	}
 }
 
 void AAbilityShooterCharacter::OnRep_LastTakeHitInfo()
 {
 	if (LastTakeHitInfo.bKilled)
-		OnDeath(LastTakeHitInfo.ActualDamage, LastTakeHitInfo.GetDamageEvent(), LastTakeHitInfo.PawnInstigator.Get(), LastTakeHitInfo.DamageCauser.Get());
+		OnDeath(LastTakeHitInfo.ActualDamage, LastTakeHitInfo.GetShooterDamage(), LastTakeHitInfo.PawnInstigator.Get(), LastTakeHitInfo.DamageCauser.Get());
 	else
-		PlayHit(LastTakeHitInfo.ActualDamage, LastTakeHitInfo.GetDamageEvent(), LastTakeHitInfo.PawnInstigator.Get(), LastTakeHitInfo.DamageCauser.Get());
+		PlayHit(LastTakeHitInfo.ActualDamage, LastTakeHitInfo.GetShooterDamage(), LastTakeHitInfo.PawnInstigator.Get(), LastTakeHitInfo.DamageCauser.Get());
 }
 
 float AAbilityShooterCharacter::TakeDamage(float Damage, FDamageEvent const & DamageEvent, AController * EventInstigator, AActor * DamageCauser)
@@ -546,16 +609,23 @@ float AAbilityShooterCharacter::TakeDamage(float Damage, FDamageEvent const & Da
 	//@TODO: check for invulnerability
 
 	//broadcast that this shooter was damaged
-	FShooterDamage shooterDamage;
-	shooterDamage.Damage = Damage;
-	shooterDamage.DamageEvent = DamageEvent;
-	shooterDamage.EventInstigator = EventInstigator;
-	shooterDamage.DamageCauser = DamageCauser;
+	FShooterDamage shooterDamage = *((FShooterDamage const*)(&DamageEvent));
+	shooterDamage.PublicDamageType = shooterDamage.DamageTypeClass;
+	if (IsValid(shooterDamage.EventInstigator) && IsValid(shooterDamage.EventInstigator->PlayerState))
+		shooterDamage.DamageCauserInfo.damagingShooterName = shooterDamage.EventInstigator->PlayerState->PlayerName;
+	if (IsValid(shooterDamage.DamageCauser))
+	{
+		AShooterItem* si = Cast<AShooterItem>(shooterDamage.DamageCauser);
+		if (IsValid(si))
+		{
+			shooterDamage.DamageCauserInfo.damagingEntityName = si->uiName;
+		}
+	}
 
 	/*if (OnShooterDamaged.IsBound())
 		OnShooterDamaged.Execute(shooterDamage, Damage);*/
 
-	//go through and let the OnShooterDamaged delegates modify the damage
+		//go through and let the OnShooterDamaged delegates modify the damage
 	for (int32 i = 0; i < OnShooterDamagedEvents.Num(); i++)
 	{
 		if (OnShooterDamagedEvents[i].IsBound())
@@ -568,9 +638,10 @@ float AAbilityShooterCharacter::TakeDamage(float Damage, FDamageEvent const & Da
 
 	//go through and let the OnShooterDealtDamaged delegates modify the damage
 	AAbilityShooterPlayerController* pc = Cast<AAbilityShooterPlayerController>(EventInstigator);
+	AAbilityShooterCharacter* damagingShooter = nullptr;
 	if (IsValid(pc))
 	{
-		AAbilityShooterCharacter* damagingShooter = Cast<AAbilityShooterCharacter>(pc->GetCharacter());
+		damagingShooter = Cast<AAbilityShooterCharacter>(pc->GetCharacter());
 		if (IsValid(damagingShooter))
 		{
 			for (int32 i = 0; i < damagingShooter->OnShooterDealtDamageEvents.Num(); i++)
@@ -594,17 +665,38 @@ float AAbilityShooterCharacter::TakeDamage(float Damage, FDamageEvent const & Da
 	}*/
 
 	//@TODO: let the gametype modify the damage
-	//@TODO: let the stats then modify the damage
+	//let the defensivestats then modify the damage
+	float defStat = 0.f;
+	if (DamageEvent.DamageTypeClass == UPhysicalDamage::StaticClass())
+	{
+		defStat = GetCurrentStat(EStat::ES_Def);
+	}
+	else if (DamageEvent.DamageTypeClass == USpecialDamage::StaticClass())
+	{
+		defStat = GetCurrentStat(EStat::ES_SpDef);
+	}
+
+	float defMultiplier;
+	if (defStat >= 0.f)
+	{
+		defMultiplier = 100.f / (100.f + defStat);
+	}
+	else
+	{
+		defMultiplier = 1.5 - (100.f / (100.f - defStat));
+	}
+	Damage *= defMultiplier;
 
 	//call the super version for blueprint hooks
 	const float actualDamage = Super::TakeDamage(Damage, DamageEvent, EventInstigator, DamageCauser);
+	shooterDamage.PublicDamage = actualDamage;
 	if (actualDamage > 0.f)
 	{
 		health -= actualDamage;
 		if (health <= 0.f)
-			Die(actualDamage, DamageEvent, EventInstigator, DamageCauser);
+			Die(actualDamage, shooterDamage, EventInstigator, DamageCauser);
 		else
-			PlayHit(actualDamage, DamageEvent, IsValid(EventInstigator) ? EventInstigator->GetPawn() : nullptr, DamageCauser);
+			PlayHit(actualDamage, shooterDamage, IsValid(EventInstigator) ? EventInstigator->GetPawn() : nullptr, DamageCauser);
 
 		MakeNoise(1.0f, EventInstigator ? EventInstigator->GetPawn() : this);
 	}
@@ -635,7 +727,7 @@ bool AAbilityShooterCharacter::CanPerformAbilities() const
 	return !bIsAimingAnAbility && currentAilment.type != EAilment::AL_Knockup && currentAilment.type != EAilment::AL_Stun && GetWorldTimerManager().GetTimerRemaining(currentAction.timer) <= 0.f;
 }
 
-bool AAbilityShooterCharacter::Die(float KillingDamage, struct FDamageEvent const& DamageEvent, class AController* Killer, class AActor* DamageCauser)
+bool AAbilityShooterCharacter::Die(float KillingDamage, struct FShooterDamage const& DamageEvent, class AController* Killer, class AActor* DamageCauser)
 {
 	if (!CanDie())
 		return false;
@@ -647,7 +739,7 @@ bool AAbilityShooterCharacter::Die(float KillingDamage, struct FDamageEvent cons
 	Killer = GetDamageInstigator(Killer, *DamageType);
 
 	AController* const KilledPlayer = (IsValid(GetController())) ? GetController() : Cast<AController>(GetOwner());
-	GetWorld()->GetAuthGameMode<AAbilityShooterGameMode>()->ShooterKilled(Killer, KilledPlayer, this, DamageType);
+	GetWorld()->GetAuthGameMode<AAbilityShooterGameMode>()->ShooterKilled(Killer, KilledPlayer, this, DamageType, Cast<AShooterItem>(DamageCauser));
 
 	NetUpdateFrequency = GetDefault<AAbilityShooterCharacter>()->NetUpdateFrequency;
 	GetCharacterMovement()->ForceReplicationUpdate();
@@ -656,7 +748,7 @@ bool AAbilityShooterCharacter::Die(float KillingDamage, struct FDamageEvent cons
 	return true;
 }
 
-void AAbilityShooterCharacter::OnDeath(float KillingDamage, FDamageEvent const & DamageEvent, APawn * PawnInstigator, AActor * DamageCauser)
+void AAbilityShooterCharacter::OnDeath(float KillingDamage, FShooterDamage const & DamageEvent, APawn * PawnInstigator, AActor * DamageCauser)
 {
 	if (bIsDying)
 		return;
@@ -721,7 +813,6 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FDamageEvent const &
 		}
 
 		EndEffect(effect);
-		abilities.Empty();
 
 		i--;
 	}
@@ -737,16 +828,23 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FDamageEvent const &
 	if (IsValid(pc) && Role == ROLE_Authority)
 	{
 		//transfer abilities
-		for (AAbility* ability : abilities)
+		for (int32 i = 0; i < abilities.Num(); i++)
 		{
-			if (!IsValid(ability))
-				continue;
+			if (i > 2)
+				break;
 
-			ability->SetupAbility(nullptr);
-			pc->persistentAbilities.AddUnique(ability);
+			if (IsValid(abilities[i]))
+			{
+				abilities[i]->SetupAbility(nullptr);
+				pc->persistentAbilities.AddUnique(abilities[i]);
+			}
+			
 		}
 
 		abilities.Empty();
+
+		//transfer the outfit
+		pc->persistentOutfit = currentOutfit;
 	}
 	
 	// cannot use IsLocallyControlled here, because even local client's controller may be NULL here
@@ -792,6 +890,26 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FDamageEvent const &
 	{
 		SetRagdollPhysics();
 	}*/
+
+	//finally tell the UIs of both the damaging character and this character of this damage event
+	pc = Cast<AAbilityShooterPlayerController>(PawnInstigator->GetController());
+	if (pc)
+	{
+		APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
+		if (hud)
+		{
+			hud->OnCharacterDealtDamage(DamageEvent);
+		}
+	}
+	pc = Cast<AAbilityShooterPlayerController>(GetController());
+	if (pc)
+	{
+		APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
+		if (hud)
+		{
+			hud->OnCharacterDamaged(DamageEvent);
+		}
+	}
 
 	SetRagdollPhysics();
 
@@ -866,6 +984,13 @@ void AAbilityShooterCharacter::PrimaryUseStart()
 		}
 	}
 
+	//then check to see if we need to confirm the equip wheel
+	if (bIsEquipmentWheelActive)
+	{
+		ConfirmEquipmentWheelSelection();
+		return;
+	}
+
 	if (!bWantsToUse)
 	{
 		bWantsToUse = true;
@@ -916,6 +1041,16 @@ void AAbilityShooterCharacter::OnStopAbility(int32 abilityIndex)
 		abilities[abilityIndex]->StopPerform(true);
 }
 
+void AAbilityShooterCharacter::OnProgressEquipWheelForward()
+{
+	StartEquipmentChangeWheel();
+}
+
+void AAbilityShooterCharacter::OnProgressEquipWheelBackward()
+{
+	StartEquipmentChangeWheel(false);
+}
+
 void AAbilityShooterCharacter::TurnAtRate(float Rate)
 {
 	// calculate delta for this frame from the rate information
@@ -961,6 +1096,66 @@ void AAbilityShooterCharacter::MoveRight(float Value)
 FName AAbilityShooterCharacter::GetEquipmentAttachPoint() const
 {
 	return equipmentAttachPoint;
+}
+
+void AAbilityShooterCharacter::StartEquipmentChangeWheel(bool bShouldProgressForward /* = true */)
+{
+	if (IsAlive())
+	{
+		bIsEquipmentWheelActive = true;
+		int32 progAmt = 1 * bShouldProgressForward ? 1 : -1;
+		lastSelectedEquipmentIndex = currentEquipmentIndex;
+		currentEquipmentIndex = FMath::Max(0, FMath::Min(equipmentInventory.Num() - 1, currentEquipmentIndex + progAmt));
+
+		APlayerController* pc = Cast<APlayerController>(GetController());
+		if (pc)
+		{
+			APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
+			if (hud)
+				hud->OnShowEquipmentWheel();
+		}
+
+		GetWorldTimerManager().SetTimer(equipWheelTimer, this, &AAbilityShooterCharacter::EquipmentWheelTimedOut, equipWheelTimeout);
+	}
+}
+
+void AAbilityShooterCharacter::EquipmentWheelTimedOut()
+{
+	if (IsAlive())
+	{
+		bIsEquipmentWheelActive = false;
+
+		currentEquipmentIndex = lastSelectedEquipmentIndex;
+
+		APlayerController* pc = Cast<APlayerController>(GetController());
+		if (pc)
+		{
+			APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
+			if (hud)
+				hud->OnHideEquipmentWheel();
+		}
+	}
+}
+
+void AAbilityShooterCharacter::ConfirmEquipmentWheelSelection()
+{
+	bIsEquipmentWheelActive = false;
+
+	GetWorldTimerManager().ClearTimer(equipWheelTimer);
+
+	if (currentEquipmentIndex >= 0 && currentEquipmentIndex < equipmentInventory.Num())
+	{
+		AEquipmentItem* equip = equipmentInventory[currentEquipmentIndex];
+		EquipEquipment(equip);
+	}
+
+	APlayerController* pc = Cast<APlayerController>(GetController());
+	if (pc)
+	{
+		APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
+		if (hud)
+			hud->OnHideEquipmentWheel();
+	}
 }
 
 bool AAbilityShooterCharacter::CanUseEquipment() const
@@ -1146,7 +1341,8 @@ float AAbilityShooterCharacter::GetCurrentStat(EStat stat) const
 	//next let outfits change the stats
 	if (IsValid(currentOutfit) && IsValid(statsManager))
 	{
-		statDelta = statsManager->GetStatFromBaseStatAddition(statDelta, stat, currentOutfit->GetDeltaStats());
+		FBaseStats outfitStats = currentOutfit->GetDeltaStats();
+		statDelta = statsManager->GetStatFromBaseStatAddition(statDelta, stat, outfitStats);
 	}
 
 	switch (stat)
@@ -1415,9 +1611,9 @@ void AAbilityShooterCharacter::SetEffectStacks_Implementation(const FString& key
 	}
 }
 
-void AAbilityShooterCharacter::UpgradeOutfit(uint8 tree, uint8 row, uint8 col)
+void AAbilityShooterCharacter::UpgradeOutfit_Implementation(uint8 tree, uint8 row, uint8 col)
 {
-	if (IsValid(currentOutfit) && HasAuthority())
+	if (IsValid(currentOutfit))
 		currentOutfit->Upgrade(tree, row, col);
 }
 
@@ -1429,6 +1625,25 @@ FRotator AAbilityShooterCharacter::GetAbilityControlRotation() const
 		return ps->viewRotation;
 
 	return GetControlRotation();
+}
+
+void AAbilityShooterCharacter::StartDash(const FVector& dashEndLocation, float spdScale)
+{
+	UAbilityShooterMovementComponent* amc = Cast<UAbilityShooterMovementComponent>(GetCharacterMovement());
+	if (IsValid(amc))
+	{
+		amc->DashLaunch(dashEndLocation, spdScale);
+		OnShooterDashStarted.Broadcast(dashEndLocation, spdScale);
+	}
+}
+
+void AAbilityShooterCharacter::StopDash()
+{
+	UAbilityShooterMovementComponent* amc = Cast<UAbilityShooterMovementComponent>(GetCharacterMovement());
+	if (IsValid(amc))
+	{
+		amc->EndDash();
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////

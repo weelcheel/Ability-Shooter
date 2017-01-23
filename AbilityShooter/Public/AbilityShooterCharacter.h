@@ -24,6 +24,9 @@ class AASPlayerState;
 DECLARE_DELEGATE_ThreeParams(FShooterDamagedDelegate, FShooterDamage, float, float&);
 DECLARE_DELEGATE_FourParams(FShooterDealtDamageDelegate, FShooterDamage, AAbilityShooterCharacter*, float, float&);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FShooterDashStarted, FVector, dashLocation, float, dashSpeed);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FShooterDashEnded);
+
 /* types for hard Crowd Control (Ailments) */
 UENUM(BlueprintType)
 enum class EAilment : uint8
@@ -135,9 +138,11 @@ class AAbilityShooterCharacter : public ACharacter
 	UPROPERTY(EditDefaultsOnly, Category = UI)
 	TSubclassOf<UUserWidget> aboveHeadWidgetClass;
 
-public:
-	AAbilityShooterCharacter();
+	/* collision component for headshots */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Collision, meta = (AllowPrivateAccess = "true"))
+	UCapsuleComponent* headshotComponent;
 
+public:
 	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Camera)
 	float BaseTurnRate;
@@ -154,6 +159,12 @@ public:
 	/* delegate to handle when this shooter deals damage */
 	TArray<FShooterDealtDamageDelegate> OnShooterDealtDamageEvents;
 
+	/* delegates to fire when this character starts a dash */
+	FShooterDashStarted OnShooterDashStarted;
+
+	/* delegates to fire when this character ends a dash */
+	FShooterDashEnded OnShooterDashEnded;
+
 protected:
 
 	/* current usable object within our reach */
@@ -165,12 +176,26 @@ protected:
 	TArray<TSubclassOf<AEquipmentItem> > defaultEquipmentList;
 
 	/** current equipment in inventory */
-	UPROPERTY(Transient, Replicated)
+	UPROPERTY(BlueprintReadOnly, Transient, Replicated)
 	TArray<AEquipmentItem*> equipmentInventory;
 
 	/** currently equipped equipment */
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_CurrentEquipment)
 	AEquipmentItem* currentEquipment;
+
+	/* what index of equipmentInventory is currently equipped */
+	UPROPERTY(BlueprintReadOnly, Category = Equipment)
+	int32 currentEquipmentIndex = -1;
+
+	/* last index that was selected, just in case the equipment wheel selection times out */
+	int32 lastSelectedEquipmentIndex = 0;
+
+	/* amount of time it takes for the equipment wheel to time out */
+	UPROPERTY(EditDefaultsOnly, Category = Equipment)
+	float equipWheelTimeout = 5.f;
+
+	/* whether or not the equipment wheel is being used right now (for input) */
+	bool bIsEquipmentWheelActive = false;
 
 	/** current abilities in inventory */
 	UPROPERTY(Transient, Replicated, VisibleAnywhere, BlueprintReadOnly, Category = Abilities)
@@ -265,6 +290,19 @@ protected:
 	/* equips a weapon from inventory for both the client and server */
 	void EquipEquipment(AEquipmentItem* item);
 
+	/* changes the equipment and allows the player to switch through all the equipment in their inventory */
+	UFUNCTION(BlueprintCallable, Category=Equipment)
+	void StartEquipmentChangeWheel(bool bShouldProgressForward = true);
+
+	/* timer for when the equipment wheel times out from being active */
+	FTimerHandle equipWheelTimer;
+
+	/* called when the equipment wheel times out */
+	void EquipmentWheelTimedOut();
+
+	/* called when the equipment selection is confirmed */
+	void ConfirmEquipmentWheelSelection();
+
 	/** Called for forwards/backward input */
 	void MoveForward(float Value);
 
@@ -294,13 +332,13 @@ protected:
 	// End of APawn interface
 
 	/** sets up the replication for taking a hit */
-	void ReplicateHit(float Damage, struct FDamageEvent const& DamageEvent, class APawn* InstigatingPawn, class AActor* DamageCauser, bool bKilled);
+	void ReplicateHit(float Damage, struct FShooterDamage const& DamageEvent, class APawn* InstigatingPawn, class AActor* DamageCauser, bool bKilled);
 
 	/** play effects on hit */
-	virtual void PlayHit(float DamageTaken, struct FDamageEvent const& DamageEvent, class APawn* PawnInstigator, class AActor* DamageCauser);
+	virtual void PlayHit(float DamageTaken, struct FShooterDamage const& DamageEvent, class APawn* PawnInstigator, class AActor* DamageCauser);
 
 	/** notification when killed, for both the server and client. */
-	virtual void OnDeath(float KillingDamage, struct FDamageEvent const& DamageEvent, class APawn* InstigatingPawn, class AActor* DamageCauser);
+	virtual void OnDeath(float KillingDamage, struct FShooterDamage const& DamageEvent, class APawn* InstigatingPawn, class AActor* DamageCauser);
 
 	/** switch to ragdoll */
 	void SetRagdollPhysics();
@@ -340,6 +378,7 @@ protected:
 	void ServerUseCurrentObjectStopped(AActor* useObject);
 
 public:
+	AAbilityShooterCharacter(const FObjectInitializer& objectInitializer);
 
 	/* current stats manager for this character (can be shared with the owning player controller) */
 	UPROPERTY(BlueprintReadOnly, Category = Stats)
@@ -401,6 +440,12 @@ public:
 	/* handler for using nearby aimed at objects stopped */
 	void OnUseObjectStop();
 
+	/* when the player progresses the equipment wheel forward */
+	void OnProgressEquipWheelForward();
+
+	/* when the player progresses the equipment wheel backwards */
+	void OnProgressEquipWheelBackward();
+
 	/* override take damage function to allow for damage to drain HP and be modified */
 	virtual float TakeDamage(float Damage, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
@@ -415,7 +460,7 @@ public:
 	* @param DamageCauser - the Actor that directly caused the damage (i.e. the Projectile that exploded, the Weapon that fired, etc)
 	* @returns true if allowed
 	*/
-	virtual bool Die(float KillingDamage, struct FDamageEvent const& DamageEvent, class AController* Killer, class AActor* DamageCauser);
+	virtual bool Die(float KillingDamage, struct FShooterDamage const& DamageEvent, class AController* Killer, class AActor* DamageCauser);
 
 	/* gets the attach point for equipment */
 	UFUNCTION(BlueprintCallable, Category = Equipment)
@@ -547,14 +592,22 @@ public:
 
 	/* upgrade the outfit across all clients */
 	UFUNCTION(BlueprintCallable, Category=Outfit)
-	void EquipOutfit(AOutfit* newOutfit);
+	void EquipOutfit(AOutfit* newOutfit, bool bReactivate = false);
 
 	/* upgrade the outfit across all clients */
-	UFUNCTION(BlueprintCallable, Category = Outfit)
+	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Outfit)
 	void UpgradeOutfit(uint8 tree, uint8 row, uint8 col);
 
 	/* gets the replicated rotator before we try other methods */
 	UFUNCTION(BlueprintCallable, Category = "Pawn")
 	FRotator GetAbilityControlRotation() const;
+
+	/* start a dash */
+	UFUNCTION(BlueprintCallable, Category = Dash)
+	void StartDash(const FVector& dashEndLocation, float spdScale=1.f);
+
+	/* end a dash */
+	UFUNCTION(BlueprintCallable, Category = Dash)
+	void StopDash();
 };
 

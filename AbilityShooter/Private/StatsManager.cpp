@@ -23,8 +23,6 @@ float UStatsManager::GetCurrentStatValue(EStat stat)
 	//first get the base stat
 	statn = GetBaseStatValue(stat);
 
-	//@TODO: next, let the stat go through the current outfit to be altered
-
 	return statn;
 }
 
@@ -79,6 +77,59 @@ float UStatsManager::GetBaseStatValue(EStat stat)
 		break;
 	case EStat::ES_HPDrain:
 		statn = characterOwner->baseStats.healthDrain;
+		break;
+	}
+
+	return statn;
+}
+
+float UStatsManager::GetStatFromBaseStatAddition(float baseStat, EStat statType, FBaseStats addStats) const
+{
+	float statn = baseStat;
+
+	switch (statType)
+	{
+	case EStat::ES_Atk:
+		statn += addStats.attack;
+		break;
+	case EStat::ES_Def:
+		statn += addStats.defense;
+		break;
+	case EStat::ES_SpAtk:
+		statn += addStats.specialAttack;
+		break;
+	case EStat::ES_SpDef:
+		statn += addStats.specialDefense;
+		break;
+	case EStat::ES_EquipUseRate:
+		statn += addStats.equipUseRate;
+		break;
+	case EStat::ES_Move:
+		statn += addStats.movementSpeed;
+		break;
+	case EStat::ES_CDR:
+		statn += addStats.cooldownReduction;
+		break;
+	case EStat::ES_HP:
+		statn += addStats.HP;
+		break;
+	case EStat::ES_CritChance:
+		statn += addStats.critChance;
+		break;
+	case EStat::ES_SpecialCritChance:
+		statn += addStats.specialCritChance;
+		break;
+	case EStat::ES_CritRatio:
+		statn += addStats.critRatio;
+		break;
+	case EStat::ES_Acc:
+		statn += addStats.accuracy;
+		break;
+	case EStat::ES_Eva:
+		statn += addStats.evasiveness;
+		break;
+	case EStat::ES_HPDrain:
+		statn += addStats.healthDrain;
 		break;
 	}
 

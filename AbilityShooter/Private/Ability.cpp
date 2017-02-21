@@ -6,6 +6,7 @@
 #include "UnrealNetwork.h"
 #include "AbilityShooterGameMode.h"
 #include "ASPlayerState.h"
+#include "ShooterDamage.h"
 
 AAbility::AAbility()
 {
@@ -24,6 +25,7 @@ AAbility::AAbility()
 
 	bIsPerforming = false;
 	bIsAiming = false;
+	bIsDisabled = false;
 
 	afterCooldownState = EAbilityState::Idle;
 	manualCooldownTime = -1.f;
@@ -37,18 +39,23 @@ AAbility::AAbility()
 
 bool AAbility::CanPerform() const
 {
-	bool bStateOK = currentState != EAbilityState::Disabled && currentState != EAbilityState::NoOwner && currentState != EAbilityState::OnCooldown;
+	bool bStateOK = !bIsDisabled && currentState != EAbilityState::NoOwner && currentState != EAbilityState::OnCooldown && currentState != EAbilityState::Paused && IsValid(characterOwner) && characterOwner->CanPerformAbilities();
 	return bStateOK;
 }
 
 void AAbility::StartPerform()
 {
+	if (currentState == EAbilityState::Performing)
+	{
+		HandleInterrupt(EAbilityInterruptSignal::UserCancelled);
+		return;
+	}
+	else if (currentState == EAbilityState::OnCooldown || currentState == EAbilityState::Paused || bIsDisabled || !characterOwner->CanPerformAbilities())
+		return;
+
 	if (Role < ROLE_Authority)
 	{
 		ServerStartPerform();
-
-		if (currentState == EAbilityState::Performing)
-			HandleInterrupt(EAbilityInterruptSignal::UserCancelled);
 	}
 
 	if (!bWantsToPerform)
@@ -88,8 +95,44 @@ void AAbility::ConfirmAim()
 	}
 }
 
+void AAbility::DealDamage_Implementation(AActor* target, float Damage, const FHitResult& hitInfo, TSubclassOf<UDamageType> damageType, AController * EventInstigator, AActor * DamageCauser)
+{
+	FShooterDamage PointDmg;
+	PointDmg.DamageTypeClass = damageType ? damageType : UDamageType::StaticClass();
+	PointDmg.HitInfo = hitInfo;
+	PointDmg.PublicHitInfo = hitInfo;
+	PointDmg.ShotDirection = characterOwner ? characterOwner->GetBaseAimRotation().Vector() : FVector::ZeroVector;
+	PointDmg.Damage = Damage;
+	PointDmg.EventInstigator = characterOwner->GetController();
+	PointDmg.DamageCauser = this;
+
+	PointDmg.PublicDamage = PointDmg.Damage;
+
+	target->TakeDamage(PointDmg.Damage, PointDmg, characterOwner->GetController(), this);
+}
+
 void AAbility::ForceStopAbility_Implementation()
 {
+	//only force the stop if the ability is already performing
+	if (currentState != EAbilityState::Performing)
+		return;
+
+	bWantsToPerform = false;
+	OnStopPerform(true, true);
+
+	if (GetWorldTimerManager().GetTimerRemaining(executionTimer) > 0.f && IsValid(characterOwner))
+	{
+		characterOwner->ForceEndCurrentAction();
+		GetWorldTimerManager().ClearTimer(executionTimer);
+	}
+}
+
+void AAbility::StopAbility_Implementation()
+{
+	//only stop if the ability is already performing
+	if (currentState != EAbilityState::Performing)
+		return;
+
 	bWantsToPerform = false;
 	OnStopPerform();
 
@@ -98,6 +141,22 @@ void AAbility::ForceStopAbility_Implementation()
 		characterOwner->ForceEndCurrentAction();
 		GetWorldTimerManager().ClearTimer(executionTimer);
 	}
+}
+
+void AAbility::PauseAbility_Implementation(float pauseDuration)
+{
+	//only pause if the ability is already performing
+	if (currentState != EAbilityState::Performing)
+		return;
+
+	currentState = EAbilityState::Paused;
+
+	GetWorldTimerManager().SetTimer(cooldownTimer, this, &AAbility::OnPauseEnd, pauseDuration);
+}
+
+void AAbility::OnPauseEnd()
+{
+	currentState = EAbilityState::Performing;
 }
 
 bool AAbility::ServerStartPerform_Validate()
@@ -152,6 +211,15 @@ void AAbility::ServerReceiveInterrupt_Implementation(EAbilityInterruptSignal sig
 
 void AAbility::HandleInterrupt(EAbilityInterruptSignal signal)
 {
+	if (currentState == EAbilityState::Aiming)
+	{
+		SetState(EAbilityState::Idle);
+		if (!HasAuthority())
+			ServerReceiveInterrupt(signal);
+
+		return;
+	}
+
 	if (HasAuthority())
 		AbilityReceivedInterruptSignal(signal);
 	else
@@ -183,22 +251,25 @@ void AAbility::HandlePerform()
 
 void AAbility::ContinueHandlePerform()
 {
-	if (bIgnoreMovementWhilePerforming && IsValid(characterOwner))
-		characterOwner->GetCharacterMovement()->SetMovementMode(MOVE_None);
-
-	if (bShouldStopAllOtherAbilitiesOnUse && IsValid(characterOwner) && HasAuthority())
+	if (bShouldStopAllOtherAbilitiesOnUse && IsValid(characterOwner))
 	{
 		for (AAbility* ability : characterOwner->abilities)
 		{
+			if (!IsValid(ability))
+				continue;
+
 			if ((ability->GetCurrentState() == EAbilityState::Performing || ability->GetCurrentState() == EAbilityState::Aiming) && ability != this)
 				ability->ForceStopAbility();
 		}
 	}
 
-	if (bShouldDisableAllOtherAbilitiesOnUse && IsValid(characterOwner) && HasAuthority())
+	if (bShouldDisableAllOtherAbilitiesOnUse && IsValid(characterOwner))
 	{
 		for (AAbility* ability : characterOwner->abilities)
 		{
+			if (!IsValid(ability))
+				continue;
+
 			if (ability != this)
 				ability->SetDisabled(true);
 		}
@@ -210,6 +281,9 @@ void AAbility::ContinueHandlePerform()
 		characterOwner->bUseControllerRotationYaw = true;
 		characterOwner->GetCharacterMovement()->bOrientRotationToMovement = false;
 	}
+
+	if (bIgnoreMovementWhilePerforming && IsValid(characterOwner) && IsValid(characterOwner->GetController()))
+		characterOwner->GetController()->SetIgnoreMoveInput(true);
 
 	if (GetNetMode() != NM_DedicatedServer)
 		StartPerformEffects();
@@ -237,11 +311,14 @@ void AAbility::ContinueHandlePerform()
 
 void AAbility::StopHandlePerform()
 {
-	OnStopPerform(false);
+	//stop the ability before it actually starts
 	currentState = EAbilityState::Idle;
+
+	bWantsToPerform = false;
+	OnStopPerform(false);
 }
 
-void AAbility::OnStopPerform(bool bFromPerforming)
+void AAbility::OnStopPerform(bool bFromPerforming, bool bForcedStop)
 {
 	if (!bFromPerforming) //if we performed before this or if the ability is just failing to start
 	{
@@ -258,29 +335,43 @@ void AAbility::OnStopPerform(bool bFromPerforming)
 				pc->SetIgnoreLookInput(false);
 		}
 
+		OnAbilityStopped();
+	}
+
+	if (IsValid(characterOwner))
+	{
 		if (bPerformingRotatesOwnerWithAim)
 		{
 			characterOwner->GetFollowCamera()->bUsePawnControlRotation = false;
 			characterOwner->bUseControllerRotationYaw = false;
 			characterOwner->GetCharacterMovement()->bOrientRotationToMovement = true;
 		}
-
-		OnAbilityStopped();
 	}
 
-	if (bIgnoreMovementWhilePerforming && IsValid(characterOwner))
-		characterOwner->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	if ((bIgnoreMovementWhilePerforming && IsValid(characterOwner) && IsValid(characterOwner->GetController())))
+		characterOwner->GetController()->SetIgnoreMoveInput(false);
 
 	if (GetNetMode() != NM_DedicatedServer)
 		StopPerformEffects();
 
 	if (HasAuthority())
-		StartCooldown();
+	{
+		if (bForcedStop && (veteranLevel >= 0 && veteranLevel < interruptCooldown.Num()))
+		{
+			StartCooldown(interruptCooldown[veteranLevel]);
+		}
+		else
+			StartCooldown();
+	}
+		
 
-	if (bShouldDisableAllOtherAbilitiesOnUse && IsValid(characterOwner) && HasAuthority())
+	if (bShouldDisableAllOtherAbilitiesOnUse && IsValid(characterOwner))
 	{
 		for (AAbility* ability : characterOwner->abilities)
 		{
+			if (!IsValid(ability))
+				continue;
+
 			if (ability != this)
 				ability->SetDisabled(false);
 		}
@@ -293,12 +384,8 @@ void AAbility::DetermineState()
 {
 	EAbilityState newState = EAbilityState::Idle;
 
-	if (currentState == EAbilityState::Disabled)
-		newState = EAbilityState::Disabled;
-	else if (currentState == EAbilityState::OnCooldown || bWantsToCooldown || GetWorldTimerManager().GetTimerRemaining(cooldownTimer) > 0.f)
+	if (currentState == EAbilityState::OnCooldown || bWantsToCooldown || GetWorldTimerManager().GetTimerRemaining(cooldownTimer) > 0.f)
 		newState = EAbilityState::OnCooldown;
-	else if (currentState == EAbilityState::Disabled)
-		newState = EAbilityState::Disabled;
 	else if (IsValid(characterOwner))
 	{
 		if (bWantsToPerform && CanPerform() && characterOwner->CanPerformAbilities() && currentState != EAbilityState::Aiming)
@@ -380,21 +467,36 @@ void AAbility::SetupAbility(AAbilityShooterCharacter* newOwner)
 		FDetachmentTransformRules rules(EDetachmentRule::KeepWorld, false);
 		DetachFromActor(rules);
 	}
+
+	//set character owner event hooks
+	if (IsValid(characterOwner))
+	{
+		//characterOwner->OnShooterDamaged.BindDynamic(this, &AAbility::OnOwnerDamaged);
+		//characterOwner->OnShooterDealtDamage.BindDynamic(this, &AAbility::OnOwnerDealtDamage);
+
+		FShooterDamagedDelegate damageEvent;
+		damageEvent.BindUObject(this, &AAbility::OnOwnerDamaged);
+		characterOwner->OnShooterDamagedEvents.Add(damageEvent);
+
+		FShooterDealtDamageDelegate damagedEvent;
+		damagedEvent.BindUObject(this, &AAbility::OnOwnerDealtDamage);
+		characterOwner->OnShooterDealtDamageEvents.Add(damagedEvent);
+
+		if (IsValid(characterOwner->GetCapsuleComponent()))
+		{
+			characterOwner->GetCapsuleComponent()->OnComponentHit.AddDynamic(this, &AAbility::OnOwnerCollided);
+		}
+
+		characterOwner->OnShooterDashStarted.AddDynamic(this, &AAbility::OnOwnerDashStart);
+		characterOwner->OnShooterDashEnded.AddDynamic(this, &AAbility::OnOwnerDashEnd);
+	}
 	
 	DetermineState();
 }
 
 void AAbility::SetDisabled(bool bDisabled /* = false */)
 {
-	if (bDisabled)
-	{
-		SetState(EAbilityState::Disabled);
-	}
-	else
-	{
-		SetState(EAbilityState::Idle);
-		DetermineState();
-	}
+	bIsDisabled = bDisabled;
 }
 
 void AAbility::AddVeteranLevel()
@@ -416,7 +518,7 @@ float AAbility::GetVeteranLevelScaledValue(TArray<float>& values) const
 
 float AAbility::GetCooldownProgressPercent() const
 {
-	if (currentState != EAbilityState::OnCooldown)
+	if (currentState != EAbilityState::OnCooldown && currentState != EAbilityState::Paused)
 		return 0.f;
 
 	float timeElapsed = GetWorldTimerManager().GetTimerElapsed(cooldownTimer);
@@ -427,7 +529,7 @@ float AAbility::GetCooldownProgressPercent() const
 
 float AAbility::GetCooldownRemaining() const
 {
-	if (currentState != EAbilityState::OnCooldown)
+	if (currentState != EAbilityState::OnCooldown && currentState != EAbilityState::Paused)
 		return 0.f;
 
 	return GetWorldTimerManager().GetTimerRemaining(cooldownTimer);
@@ -468,7 +570,7 @@ void AAbility::StartCooldownTimer()
 
 void AAbility::CooldownFinished()
 {
-	if (currentState != EAbilityState::Disabled && currentState != EAbilityState::NoOwner)
+	if (currentState != EAbilityState::NoOwner)
 		SetState(afterCooldownState);
 
 	afterCooldownState = EAbilityState::Idle;
@@ -527,7 +629,7 @@ FVector AAbility::GetCameraDamageStartLocation(const FVector& aimDir) const
 	return outStartTrace;
 }
 
-void AAbility::LaunchProjectile(const FName& originSocket, TSubclassOf<AProjectile> projectileType)
+void AAbility::LaunchProjectile(const FName& originSocket, TSubclassOf<AProjectile> projectileType, const TArray<FEffectStatAlter>& projectileEffectAlters, float damage)
 {
 	USkeletalMeshComponent* useMesh = characterOwner->GetMesh();
 	FVector Origin = useMesh->GetSocketLocation(originSocket) + characterOwner->GetActorForwardVector() * 100.f;
@@ -553,15 +655,15 @@ void AAbility::LaunchProjectile(const FName& originSocket, TSubclassOf<AProjecti
 		DrawDebugLine(GetWorld(), Origin, newImpact.Location, FColor::Green, true, 5.f, 0, 0.5f);
 	}*/
 
-	ServerLaunchProjectile(Origin, shootDir, projectileType);
+	ServerLaunchProjectile(Origin, shootDir, projectileType, projectileEffectAlters, damage);
 }
 
-bool AAbility::ServerLaunchProjectile_Validate(const FVector& origin, const FVector& launchDir, TSubclassOf<AProjectile> projectileType)
+bool AAbility::ServerLaunchProjectile_Validate(const FVector& origin, const FVector& launchDir, TSubclassOf<AProjectile> projectileType, const TArray<FEffectStatAlter>& projectileEffectAlters, float damage)
 {
 	return true;
 }
 
-void AAbility::ServerLaunchProjectile_Implementation(const FVector& origin, const FVector& launchDir, TSubclassOf<AProjectile> projectileType)
+void AAbility::ServerLaunchProjectile_Implementation(const FVector& origin, const FVector& launchDir, TSubclassOf<AProjectile> projectileType, const TArray<FEffectStatAlter>& projectileEffectAlters, float damage)
 {
 	FTransform projTrans(launchDir.Rotation(), origin);
 	FVector realLaunchDir = launchDir.Rotation().Vector();
@@ -571,6 +673,8 @@ void AAbility::ServerLaunchProjectile_Implementation(const FVector& origin, cons
 		projectile->Instigator = characterOwner;
 		projectile->SetOwner(this);
 		projectile->InitVelocity(realLaunchDir);
+		projectile->impactEffectStatAlters = projectileEffectAlters;
+		projectile->projConfig.explosionDamage = damage;
 
 		UGameplayStatics::FinishSpawningActor(projectile, projTrans);
 	}
@@ -616,7 +720,14 @@ void AAbility::OnRep_CharacterOwner()
 void AAbility::OnRep_IsPerforming()
 {
 	if (bIsPerforming)
-		HandlePerform();
+	{
+		if (!bAutoPerform)
+		{
+			ShouldPerform();
+		}
+		else
+			ContinueHandlePerform();
+	}
 	else
 		OnStopPerform();
 }
@@ -637,8 +748,47 @@ bool AAbility::CanHurtCharacter(AAbilityShooterCharacter* testCharacter) const
 		return false;
 	if (!testCharacter->IsAlive())
 		return false;
+	if (characterOwner == testCharacter)
+		return false;
 	
 	return IsValid(gm) ? gm->CanDealDamage(Cast<AASPlayerState>(characterOwner->PlayerState), Cast<AASPlayerState>(testCharacter->PlayerState)) : false;
+}
+
+void AAbility::GetAreaOfEffect(const FVector& sphereCenter, const float sphereRadius, TArray<AAbilityShooterCharacter*>& outList, bool bFindEnemies /* = true */, bool bFindSelf /* = false */)
+{
+	outList.Empty(); //clear the array
+
+	TArray<FHitResult> sweepResults;
+	const FVector end = sphereCenter + FVector(0.f, 0.f, 5.0f);
+
+	GetWorld()->SweepMultiByChannel(sweepResults, sphereCenter, end, FRotator::ZeroRotator.Quaternion(), ECC_Pawn, FCollisionShape::MakeSphere(sphereRadius));
+
+	for (FHitResult hit : sweepResults)
+	{
+		AAbilityShooterCharacter* gc = Cast<AAbilityShooterCharacter>(hit.GetActor());
+		//add character we're interested in
+		if (IsValid(gc) && gc->IsAlive())
+		{
+			//go to the next one if we foaund the character owner and we're not supposed to return them
+			if (!bFindSelf && gc == characterOwner)
+				continue;
+
+			bool bCanHurt = CanHurtCharacter(gc);
+			
+			if (bCanHurt == bFindEnemies)
+			{
+				outList.AddUnique(gc);
+			}
+		}
+	}
+}
+
+void AAbility::EditCooldown_Implementation(float newCooldownTime)
+{
+	if (currentState == EAbilityState::OnCooldown || currentState == EAbilityState::Paused)
+	{
+		GetWorldTimerManager().SetTimer(cooldownTimer, this, &AAbility::CooldownFinished, newCooldownTime);
+	}
 }
 
 void AAbility::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const

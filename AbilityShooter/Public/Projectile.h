@@ -64,10 +64,6 @@ protected:
 	/* cache the controller that launched this projectile */
 	AController* controller;
 
-	/* projectile data */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = ProjData)
-	FProjectileData projConfig;
-
 	/* has this projectile exploded? */
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_Exploded)
 	bool bExploded;
@@ -84,6 +80,7 @@ protected:
 	void OnRep_Exploded();
 
 	/** trigger explosion */
+	UFUNCTION(BlueprintCallable, Category=Projectile)
 	void Explode(const FHitResult& impact);
 
 	/* blueprint hook for on explosion effects */
@@ -98,6 +95,14 @@ protected:
 
 public:
 	AProjectile();
+
+	/* array of stat alters to give an effect on impact */
+	UPROPERTY(BlueprintReadOnly, Category = ImpactEffect)
+	TArray<FEffectStatAlter> impactEffectStatAlters;
+
+	/* projectile data */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = ProjData)
+	FProjectileData projConfig;
 
 	/* setup velocity */
 	void InitVelocity(FVector& dir);

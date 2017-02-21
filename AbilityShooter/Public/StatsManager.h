@@ -68,6 +68,32 @@ struct FBaseStats
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Stat)
 	float healthDrain = 0.f;
+
+	FBaseStats& operator +=(const FBaseStats& rhs)
+	{
+		attack += rhs.attack;
+		defense += rhs.defense;
+		specialAttack += rhs.specialAttack;
+		specialDefense += rhs.specialDefense;
+		equipUseRate += rhs.equipUseRate;
+		movementSpeed += rhs.movementSpeed;
+		cooldownReduction += rhs.cooldownReduction;
+		HP += rhs.HP;
+		critChance += rhs.critChance;
+		specialCritChance += rhs.specialCritChance;
+		critRatio += rhs.critRatio;
+		accuracy += rhs.accuracy;
+		evasiveness += rhs.evasiveness;
+		healthDrain += rhs.healthDrain;
+
+		return *this;
+	}
+
+	friend FBaseStats operator+(FBaseStats lhs, const FBaseStats& rhs)
+	{
+		lhs += rhs;
+		return lhs;
+	}
 };
 
 UCLASS()
@@ -96,4 +122,8 @@ public:
 	/* gets the current value of a stat not factoring in any effects and everything at max value */
 	UFUNCTION(BlueprintCallable, Category = Stats)
 	float GetBaseStatValue(EStat stat);
+
+	/* gets a stat from adding a base stat and a FBaseStats struct */
+	UFUNCTION(BlueprintCallable, Category = Stats)
+	float GetStatFromBaseStatAddition(float baseStat, EStat statType, FBaseStats addStats) const;
 };

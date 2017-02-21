@@ -23,7 +23,7 @@ AEquipmentItem::AEquipmentItem()
 	bIsEquipped = false;
 	bWantsToUse = false;
 	bPendingEquip = false;
-	currentState = EEquipmentState::Idle;
+	currentState = EEquipmentState::NoOwner;
 	bWantsToAlt = false;
 	bIsAltActive = false;
 
@@ -76,6 +76,20 @@ void AEquipmentItem::OnEquip(const AEquipmentItem* lastItem)
 
 	if (IsValid(characterOwner) && characterOwner->IsLocallyControlled())
 		PlayEquipmentSound(equipSound);
+
+	if (IsValid(characterOwner))
+	{
+		//characterOwner->OnShooterDamaged.BindDynamic(this, &AEquipmentItem::OnOwnerDamaged);
+		//characterOwner->OnShooterDealtDamage.BindDynamic(this, &AEquipmentItem::OnOwnerDealtDamage);
+
+		FShooterDamagedDelegate damageEvent;
+		damageEvent.BindUObject(this, &AEquipmentItem::OnOwnerDamaged);
+		characterOwner->OnShooterDamagedEvents.Add(damageEvent);
+
+		FShooterDealtDamageDelegate damagedEvent;
+		damagedEvent.BindUObject(this, &AEquipmentItem::OnOwnerDealtDamage);
+		characterOwner->OnShooterDealtDamageEvents.Add(damagedEvent);
+	}
 }
 
 void AEquipmentItem::OnEquipFinished()
@@ -102,12 +116,20 @@ void AEquipmentItem::OnUnEquip()
 		GetWorldTimerManager().ClearTimer(onEquipFinishedTimer);
 	}
 
+	if (IsValid(characterOwner))
+	{
+		//characterOwner->OnShooterDamaged.RemoveAll(this);
+		//characterOwner->OnShooterDealtDamage.RemoveAll(this);
+	}
+
 	DetermineEquipmentState();
 }
 
 void AEquipmentItem::OnEnterInventory(AAbilityShooterCharacter* newOwner)
 {
 	SetOwningCharacter(newOwner);
+
+	currentState = EEquipmentState::Idle;
 }
 
 void AEquipmentItem::OnLeaveInventory()
@@ -117,6 +139,8 @@ void AEquipmentItem::OnLeaveInventory()
 
 	if (IsAttachedToCharacter())
 		OnUnEquip();
+
+	currentState = EEquipmentState::NoOwner;
 }
 
 void AEquipmentItem::AttachMeshToCharacter()
@@ -351,7 +375,7 @@ void AEquipmentItem::OnBurstStarted()
 
 void AEquipmentItem::OnBurstFinished()
 {
-	if (!bIsAltActive)
+	if (!bIsAltActive && IsValid(characterOwner))
 	{
 		characterOwner->GetFollowCamera()->bUsePawnControlRotation = false;
 		characterOwner->bUseControllerRotationYaw = false;

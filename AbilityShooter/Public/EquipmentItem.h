@@ -5,6 +5,7 @@
 #include "Runtime/UMG/Public/Slate/SObjectWidget.h"
 #include "Runtime/UMG/Public/IUMGModule.h"
 #include "Runtime/UMG/Public/Blueprint/UserWidget.h"
+#include "ShooterItem.h"
 #include "EquipmentItem.generated.h"
 
 class AAbilityShooterCharacter;
@@ -13,6 +14,7 @@ class USoundCue;
 UENUM(BlueprintType)
 enum class EEquipmentState : uint8
 {
+	NoOwner UMETA(DisplayName="No Owner"),
 	Idle UMETA(DisplayName = "Idle"),
 	Using UMETA(DisplayName = "Using"),
 	Equipping UMETA(DisplayName = "Equipping"),
@@ -22,7 +24,7 @@ enum class EEquipmentState : uint8
 };
 
 UCLASS(ABSTRACT, Blueprintable)
-class AEquipmentItem : public AActor
+class AEquipmentItem : public AShooterItem
 {
 	friend class AAbilityShooterCharacter;
 
@@ -32,10 +34,6 @@ protected:
 
 	/* ---------------------------------------------------------------------- */
 	// Variables
-
-	/* ui name of this weapon */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = UI)
-	FText uiName;
 
 	/** character owner */
 	UPROPERTY(BlueprintReadOnly, Transient, ReplicatedUsing = OnRep_characterOwner, Category = Ability)
@@ -230,16 +228,7 @@ protected:
 	bool IsAttachedToCharacter() const;
 
 	//////////////////////////////////////////////////////////////////////////
-	// Control
-
-	/** check if equipment can be used */
-	virtual bool CanUse() const;
-
-	//////////////////////////////////////////////////////////////////////////
 	// Reading data
-
-	/** get current equipment state */
-	EEquipmentState GetCurrentState() const;
 
 	/** get equipment mesh */
 	USkeletalMeshComponent* GetEquipmentMesh() const;
@@ -272,9 +261,6 @@ protected:
 
 	/** get the originating location for camera damage */
 	FVector GetCameraDamageStartLocation(const FVector& AimDir) const;
-
-	/** find hit */
-	FHitResult EquipmentTrace(const FVector& TraceFrom, const FVector& TraceTo) const;
 
 	//////////////////////////////////////////////////////////////////////////
 	// Blueprint hooks
@@ -335,4 +321,16 @@ public:
 	/* whether or not this equipment's alt is active */
 	UFUNCTION(BlueprintCallable, Category = Alt)
 	bool IsAltActive() const;
+
+	//////////////////////////////////////////////////////////////////////////
+	// Control
+
+	/** check if equipment can be used */
+	virtual bool CanUse() const;
+
+	/** get current equipment state */
+	EEquipmentState GetCurrentState() const;
+
+	/** find hit */
+	FHitResult EquipmentTrace(const FVector& TraceFrom, const FVector& TraceTo) const;
 };

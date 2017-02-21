@@ -26,6 +26,7 @@ DECLARE_DELEGATE_FourParams(FShooterDealtDamageDelegate, FShooterDamage, AAbilit
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FShooterDashStarted, FVector, dashLocation, float, dashSpeed);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FShooterDashEnded);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnShooterDied, FShooterDamage, shooterDamage);
 
 /* types for hard Crowd Control (Ailments) */
 UENUM(BlueprintType)
@@ -112,6 +113,43 @@ struct FCharacterActionInfo
 	}
 };
 
+/* shield entry */
+USTRUCT()
+struct FDamageShield
+{
+	GENERATED_USTRUCT_BODY()
+
+	/* amount of damage this shield absorbs */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Shield)
+	float amountMax;
+
+	/* amount of shield left in this shield */
+	float amount;
+
+	/* duration of this shield. <= 0.f for indefinitely lasting shields */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Shield)
+	float duration;
+
+	/* timer handle for this shield */
+	UPROPERTY(BlueprintReadOnly, Category = Shield)
+	FTimerHandle timer;
+
+	/* type of damage this shield absorbs */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Shield)
+	TSubclassOf<UDamageType> damageType;
+
+	/* keyname for this shield */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Shield)
+	FString key;
+
+	/* game character that created (originated) this shield */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Shield)
+	AAbilityShooterCharacter* originatingCharacter;
+
+	/* effect this shield is linked to to end it early if needed */
+	UEffect* shieldEffect;
+};
+
 UCLASS(config=Game)
 class AAbilityShooterCharacter : public ACharacter
 {
@@ -121,26 +159,6 @@ class AAbilityShooterCharacter : public ACharacter
 	friend class AAbilityShooterGameMode;
 
 	GENERATED_BODY()
-
-	/** Camera boom positioning the camera behind the character */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
-	class USpringArmComponent* CameraBoom;
-
-	/** Follow camera */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
-	class UCameraComponent* FollowCamera;
-
-	/* widget component for above head character info */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = UI, meta = (AllowPrivateAccess = "true"))
-	UWidgetComponent* aboveHeadWidget;
-
-	/* template widget class for the aboveHeadWidget */
-	UPROPERTY(EditDefaultsOnly, Category = UI)
-	TSubclassOf<UUserWidget> aboveHeadWidgetClass;
-
-	/* collision component for headshots */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Collision, meta = (AllowPrivateAccess = "true"))
-	UCapsuleComponent* headshotComponent;
 
 public:
 	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
@@ -165,7 +183,31 @@ public:
 	/* delegates to fire when this character ends a dash */
 	FShooterDashEnded OnShooterDashEnded;
 
+	/* functions to call when this shooter dies */
+	UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = Death)
+	FOnShooterDied OnShooterDied;
+
 protected:
+
+	/** Camera boom positioning the camera behind the character */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
+	class USpringArmComponent* CameraBoom;
+
+	/** Follow camera */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
+	class UCameraComponent* FollowCamera;
+
+	/* widget component for above head character info */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = UI, meta = (AllowPrivateAccess = "true"))
+	UWidgetComponent* aboveHeadWidget;
+
+	/* template widget class for the aboveHeadWidget */
+	UPROPERTY(EditDefaultsOnly, Category = UI)
+	TSubclassOf<UUserWidget> aboveHeadWidgetClass;
+
+	/* collision component for headshots */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Collision, meta = (AllowPrivateAccess = "true"))
+	UCapsuleComponent* headshotComponent;
 
 	/* current usable object within our reach */
 	UPROPERTY(BlueprintReadOnly, Category = UseObject)
@@ -253,6 +295,25 @@ protected:
 	/* client movespeed that is updated by the server */
 	UPROPERTY()
 	float clientMoveSpeed;
+
+	/* amount of time it takes for saved damage events to timeout after not taking any damage */
+	UPROPERTY(EditDefaultsOnly, Category = DeathRecap)
+	float deathRecapListTimeout;
+
+	/* array of shooter ui damage structs to display in the death recap */
+	UPROPERTY(BlueprintReadOnly, Category = DeathRecap)
+	TArray<FShooterDamage> deathRecapList;
+
+	/* timer that fires when the death recap list times out */
+	FTimerHandle deathRecapTimeoutTimer;
+
+	/* array of individual shields this character currently has */
+	UPROPERTY()
+	TMap<FString, FDamageShield> shields;
+
+	/* array of shield totals this Shooter currently has */
+	UPROPERTY()
+	TMap<TSubclassOf<UDamageType>, float> shieldTotals;
 
 	/** spawn inventory, setup initial variables */
 	virtual void PostInitializeComponents() override;
@@ -355,6 +416,13 @@ protected:
 	UFUNCTION()
 	void OnRep_CurrentOutfit();
 
+	/* called whenever the death recap list times out */
+	void OnDeathRecapTimeout();
+
+	/* called when the shooter dies */
+	UFUNCTION(BlueprintImplementableEvent, Category=Death)
+	void OnShooterDeath(FShooterDamage killingDamage);
+
 	/* notify the client of Ailment */
 	//UFUNCTION()
 	//void OnRep_Ailment();
@@ -376,6 +444,20 @@ protected:
 	/* server use object */
 	UFUNCTION(reliable, server, WithValidation)
 	void ServerUseCurrentObjectStopped(AActor* useObject);
+
+	/* try to absorb damage and then return any damage not absorbed */
+	float TryDamageShieldAbsorb(float dmgAmount, TSubclassOf<UDamageType> dmgType);
+
+	/* called when a shield should finish */
+	UFUNCTION(BlueprintCallable, Category = Effect)
+	void ShieldFinished(FString finishingShield);
+
+	/* updates the total shield amounts */
+	void UpdateTotalShieldAmounts();
+
+	/* sends an array of shields to be updated to the clients */
+	UFUNCTION(reliable, client)
+	void ClientUpdateShields(const TArray<FDamageShield>& updatedShields);
 
 public:
 	AAbilityShooterCharacter(const FObjectInitializer& objectInitializer);
@@ -539,7 +621,7 @@ public:
 
 	/* [server] adds an already exisiting ability to this character's inventory */
 	UFUNCTION(BlueprintCallable, Category = Abilities)
-	void AddExistingAbility(AAbility* ability);
+	void AddExistingAbility(AAbility* ability, bool bFromOutfit = false);
 
 	/* whether or not this character is an enemy for a controller */
 	UFUNCTION(BlueprintCallable, Category = Enemy)
@@ -590,6 +672,10 @@ public:
 	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Abilities)
 	void SetEffectStacks(const FString& key, int32 newAmt, bool bShouldResetEffectTimer = true);
 
+	/* gets the effect with the specified key */
+	UFUNCTION(BlueprintCallable, Category = Effect)
+	UEffect* GetEffect(const FString& key) const;
+
 	/* upgrade the outfit across all clients */
 	UFUNCTION(BlueprintCallable, Category=Outfit)
 	void EquipOutfit(AOutfit* newOutfit, bool bReactivate = false);
@@ -609,5 +695,17 @@ public:
 	/* end a dash */
 	UFUNCTION(BlueprintCallable, Category = Dash)
 	void StopDash();
+
+	/* adds a shield to the array */
+	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Shield)
+	void AddShield(FDamageShield newShield, const FString& effectKey);
+
+	/* returns the total amount of damage each type of shield can absorb */
+	UFUNCTION(BlueprintCallable, Category = Effect)
+	void GetTotalShieldAmounts(UPARAM() TArray<TSubclassOf<UDamageType> >& shieldedDamageTypes, UPARAM() TArray<float>& shieldDamageTotals);
+
+	/* forces a shield to end across all clients */
+	UFUNCTION(reliable, NetMulticast)
+	void EndShield(const FString& key);
 };
 

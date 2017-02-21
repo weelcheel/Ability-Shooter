@@ -28,6 +28,9 @@ protected:
 	UPROPERTY()
 	UStatsManager* statsManager;
 
+	/* counter for what player this controller is death spectating */
+	int32 deathSpectatorCounter;
+
 	/* handles restarting the player on a respawn */
 	void HandleRespawnTimer();
 
@@ -110,4 +113,16 @@ public:
 	/* populate UI with player server information */
 	UFUNCTION(BlueprintImplementableEvent, Category = UI)
 	void PopulatePlayerServerList(const TArray<FPlayerServerInfo>& serverList);
+
+	/* receive a message to display to the player from the game mode */
+	UFUNCTION(reliable, client)
+	void ClientReceiveKillfeedMessage(const FString& message);
+
+	/* let both the client and the server know that the previously controlled Shooter has died */
+	UFUNCTION(reliable, client)
+	void OnShooterDeath(const FShooterDamage& damage);
+
+	/* let the local player iterate through other teammates (or players in ffa) to spectate when dead */
+	UFUNCTION(BlueprintCallable, Category = Spectating)
+	void DeathSpectateNextShooter(bool bIterateForward = true);
 };

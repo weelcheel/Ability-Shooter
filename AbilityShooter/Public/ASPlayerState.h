@@ -4,6 +4,7 @@
 #include "ASPlayerState.generated.h"
 
 class AShooterItem;
+class AAbilityShooterCharacter;
 
 UCLASS()
 class AASPlayerState : public APlayerState
@@ -37,6 +38,10 @@ public:
 	/* current view rotation for this player so that their aim is successfully replicated */
 	UPROPERTY(BlueprintReadOnly, Category = ViewRotation)
 	FRotator viewRotation;
+
+	/* current Shooter this player is currently controlling */
+	UPROPERTY(BlueprintReadOnly, replicated, Category = Shooter)
+	AAbilityShooterCharacter* currentShooter;
 
 	/* net multicast function to set the respawn timer on all clients but actually performs the respawn on the server */
 	UFUNCTION(NetMulticast, reliable)

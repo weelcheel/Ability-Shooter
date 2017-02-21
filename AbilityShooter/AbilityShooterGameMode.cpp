@@ -124,6 +124,12 @@ void AAbilityShooterGameMode::RestartPlayer(class AController* NewPlayer)
 		*/
 		NewPlayer->Possess(NewPlayer->GetPawn());
 
+		AASPlayerState* ps = Cast<AASPlayerState>(NewPlayer->PlayerState);
+		if (IsValid(ps))
+		{
+			ps->currentShooter = Cast<AAbilityShooterCharacter>(NewPlayer->GetPawn());
+		}
+
 		// If the Pawn is destroyed as part of possession we have to abort
 		if (NewPlayer->GetPawn() == nullptr)
 		{
@@ -299,10 +305,62 @@ void AAbilityShooterGameMode::EndMatch()
 		{
 			pc->GetPawn()->Destroy();
 		}
+
+		GetWorldTimerManager().ClearAllTimersForObject(pc->PlayerState);
+		GetWorldTimerManager().ClearAllTimersForObject(pc);
+	}
+
+	GetWorldTimerManager().SetTimer(postgameTimer, this, &AAbilityShooterGameMode::ReturnPlayersToMainMenu, 10.f, false);
+}
+
+void AAbilityShooterGameMode::ReturnPlayersToMainMenu()
+{
+	for (TActorIterator<APlayerController> pcitr(GetWorld()); pcitr; ++pcitr)
+	{
+		APlayerController* pc = *pcitr;
+
+		SendPlayer(pc, "MainMenu?listen");
 	}
 }
 
 int32 AAbilityShooterGameMode::DecideWinner()
 {
 	return 0;
+}
+
+void AAbilityShooterGameMode::BroadcastKillfeedMessage(const FString& message, const TArray<APlayerController*>& playerList, int32 teamIndex)
+{
+	if (playerList.Num() > 0)
+	{
+		for (APlayerController* con : playerList)
+		{
+			AAbilityShooterPlayerController* pc = Cast<AAbilityShooterPlayerController>(con);
+			if (IsValid(pc))
+				pc->ClientReceiveKillfeedMessage(message);
+		}
+	}
+	else if (teamIndex >= 0)
+	{
+		for (TActorIterator<APlayerController> pcitr(GetWorld()); pcitr; ++pcitr)
+		{
+			APlayerController* con = *pcitr;
+			AASPlayerState* ps = Cast<AASPlayerState>(con->PlayerState);
+			if (IsValid(ps) && ps->GetTeamIndex() == teamIndex)
+			{
+				AAbilityShooterPlayerController* pc = Cast<AAbilityShooterPlayerController>(con);
+				if (IsValid(pc))
+					pc->ClientReceiveKillfeedMessage(message);
+			}
+		}
+	}
+	else
+	{
+		for (TActorIterator<APlayerController> pcitr(GetWorld()); pcitr; ++pcitr)
+		{
+			APlayerController* con = *pcitr;
+			AAbilityShooterPlayerController* pc = Cast<AAbilityShooterPlayerController>(con);
+			if (IsValid(pc))
+				pc->ClientReceiveKillfeedMessage(message);
+		}
+	}
 }

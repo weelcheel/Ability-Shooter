@@ -4,10 +4,11 @@
 #include "AbilityShooterPlayerController.h"
 #include "PlayerHUD.h"
 #include "ShooterItem.h"
+#include "AbilityShooterCharacter.h"
 
 AASPlayerState::AASPlayerState()
 {
-
+	currentShooter = nullptr;
 }
 
 void AASPlayerState::SetRespawnTimer_Implementation(float repsawnTime)
@@ -50,5 +51,6 @@ void AASPlayerState::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & Ou
 	DOREPLIFETIME(AASPlayerState, team);
 	DOREPLIFETIME(AASPlayerState, cash);
 	DOREPLIFETIME(AASPlayerState, profileJson);
+	DOREPLIFETIME(AASPlayerState, currentShooter)
 	//DOREPLIFETIME(AASPlayerState, viewRotation);
 }

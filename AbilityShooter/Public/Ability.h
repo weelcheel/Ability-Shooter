@@ -319,6 +319,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void GetAreaOfEffect(const FVector& sphereCenter, const float sphereRadius, TArray<AAbilityShooterCharacter*>& outList, bool bFindEnemies = true, bool bFindSelf = false);
 
+	/* when called from the server, it edits the cooldown timer across all clients. Editing a cooldown timer can only happen while this ability is in the cooldown (or paused) state. */
+	UFUNCTION(BlueprintCallable, reliable, NetMulticast, Category = Cooldown)
+	void EditCooldown(float newCooldownTime);
+
 	/* gets the Ability state */
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	EAbilityState GetCurrentState() const

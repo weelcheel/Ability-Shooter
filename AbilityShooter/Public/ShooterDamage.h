@@ -71,3 +71,15 @@ public:
 
 	}
 };
+
+UCLASS()
+class UMixedDamage : public UDamageType
+{
+	GENERATED_BODY()
+
+public:
+	UMixedDamage()
+	{
+
+	}
+};

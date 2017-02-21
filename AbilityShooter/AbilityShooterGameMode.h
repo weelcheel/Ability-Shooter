@@ -58,6 +58,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = AI)
 	TSubclassOf<AAbilityShooterBot> aiShooterBotClass;
 
+	/* timer handle for the post game timer before we kick everyone off the server */
+	FTimerHandle postgameTimer;
+
 	/* check to see if there is enough room for the player */
 	virtual void PreLogin(const FString& Options, const FString& Address, const TSharedPtr<const FUniqueNetId>& UniqueId, FString& ErrorMessage);
 
@@ -66,6 +69,9 @@ protected:
 
 	/* finds the best shooter spawn point for the player */
 	virtual AActor* FindBestShooterSpawn(class AController* player);
+
+	/* iterates through each of the players and returns them to the main menu */
+	void ReturnPlayersToMainMenu();
 
 public:
 	AAbilityShooterGameMode();
@@ -97,6 +103,10 @@ public:
 
 	/* decide the winner of this match */
 	virtual int32 DecideWinner();
+
+	/* broadcast a message to a certain set of Shooter's player huds, if possible. teamIndex < 0 means broadcast to all teams, while a playerlist length > 0 means to broadcast to specific players. Specific players takes priority to teams */
+	UFUNCTION(BlueprintCallable, Category = KillfeedLog)
+	void BroadcastKillfeedMessage(const FString& message, const TArray<APlayerController*>& playerList, int32 teamIndex = -1);
 };
 
 

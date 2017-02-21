@@ -80,6 +80,10 @@ AAbilityShooterCharacter::AAbilityShooterCharacter(const FObjectInitializer& obj
 	headshotComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
 	headshotComponent->SetCollisionResponseToChannel(COLLISION_WEAPON, ECR_Block);
 
+	OnShooterDied.AddDynamic(this, &AAbilityShooterCharacter::OnShooterDeath);
+
+	deathRecapListTimeout = 10.f;
+
 	NetCullDistanceSquared = 2500000000.f;
 }
 
@@ -131,8 +135,14 @@ void AAbilityShooterCharacter::PawnClientRestart()
 	{
 		APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
 		if (IsValid(hud))
+		{
 			hud->OnEffectsListUpdate();
+			hud->OnCharacterRespawned();
+		}
 	}
+
+	//clear death recap list
+	deathRecapList.Empty();
 
 	//@TODO: set mesh team color material instance
 }
@@ -278,27 +288,72 @@ void AAbilityShooterCharacter::AddAbility(TSubclassOf<AAbility> newType, bool bF
 	}
 }
 
-void AAbilityShooterCharacter::AddExistingAbility(AAbility* ability)
+void AAbilityShooterCharacter::AddExistingAbility(AAbility* ability, bool bFromOutfit)
 {
 	//only run on server with a valid class
 	if (Role < ROLE_Authority || !IsValid(ability))
 		return;
 
-	int32 selectedIndex = -1;
-	for (int32 i = 0; i < abilities.Num(); i++)
+	//abilities array is corrupt
+	if (abilities.Num() != 7)
 	{
-		if (!IsValid(abilities[i]))
+		UE_LOG(LogTemp, Warning, TEXT("The abilities array for a Shooter is corrupt!"));
+		return;
+	}
+
+	int selectedIndex = -1;
+
+	if (ability->bUltimateAbility)
+		selectedIndex = 2;
+	else
+	{
+		if (bFromOutfit)
 		{
-			selectedIndex = i;
-			break;
+			for (int32 i = 3; i <= 6; i++)
+			{
+				AAbility* test = abilities[i];
+				if (!IsValid(test))
+				{
+					selectedIndex = i;
+					break;
+				}
+			}
+		}
+		else
+		{
+			for (int32 i = 0; i <= 1; i++)
+			{
+				AAbility* test = abilities[i];
+				if (!IsValid(test))
+				{
+					selectedIndex = i;
+					break;
+				}
+			}
+		}
+	}
+
+	//don't add if the Shooter already has an ultimate
+	if (ability->bUltimateAbility)
+	{
+		for (AAbility* ab : abilities)
+		{
+			if (!IsValid(ab))
+				continue;
+
+			if (ab->bUltimateAbility)
+				return;
 		}
 	}
 
 	if (selectedIndex < 0 || selectedIndex >= 7)
 		return;
 
-	ability->SetupAbility(this);
-	abilities[selectedIndex] = ability;
+	if (IsValid(ability))
+	{
+		ability->SetupAbility(this);
+		abilities[selectedIndex] = ability;
+	}
 }
 
 void AAbilityShooterCharacter::PossessedBy(class AController* C)
@@ -389,7 +444,7 @@ void AAbilityShooterCharacter::AddEquipment(AEquipmentItem* item)
 	if (IsValid(item) && Role == ROLE_Authority)
 	{
 		item->OnEnterInventory(this);
-		int32 ind = equipmentInventory.AddUnique(item);
+		int32 ind = equipmentInventory.Add(item);
 
 		if (!IsValid(currentEquipment))
 		{
@@ -552,7 +607,13 @@ void AAbilityShooterCharacter::PlayHit(float DamageTaken, struct FShooterDamage 
 	}
 
 	if (DamageTaken > 0.f)
+	{
 		ApplyDamageMomentum(DamageTaken, DamageEvent, PawnInstigator, DamageCauser);
+
+		//add the damage event to death recap and start the timeout timer
+		deathRecapList.Add(DamageEvent);
+		GetWorldTimerManager().SetTimer(deathRecapTimeoutTimer, this, &AAbilityShooterCharacter::OnDeathRecapTimeout, deathRecapListTimeout);
+	}
 
 	/*AShooterPlayerController* MyPC = Cast<AShooterPlayerController>(Controller);
 	AShooterHUD* MyHUD = MyPC ? Cast<AShooterHUD>(MyPC->GetHUD()) : NULL;
@@ -590,6 +651,11 @@ void AAbilityShooterCharacter::PlayHit(float DamageTaken, struct FShooterDamage 
 			hud->OnCharacterDamaged(DamageEvent);
 		}
 	}
+}
+
+void AAbilityShooterCharacter::OnDeathRecapTimeout()
+{
+	deathRecapList.Empty();
 }
 
 void AAbilityShooterCharacter::OnRep_LastTakeHitInfo()
@@ -687,6 +753,9 @@ float AAbilityShooterCharacter::TakeDamage(float Damage, FDamageEvent const & Da
 	}
 	Damage *= defMultiplier;
 
+	//now that we have the final damage amount, let shields absorb any damage they can
+	Damage = TryDamageShieldAbsorb(Damage, shooterDamage.PublicDamageType);
+
 	//call the super version for blueprint hooks
 	const float actualDamage = Super::TakeDamage(Damage, DamageEvent, EventInstigator, DamageCauser);
 	shooterDamage.PublicDamage = actualDamage;
@@ -739,6 +808,11 @@ bool AAbilityShooterCharacter::Die(float KillingDamage, struct FShooterDamage co
 	Killer = GetDamageInstigator(Killer, *DamageType);
 
 	AController* const KilledPlayer = (IsValid(GetController())) ? GetController() : Cast<AController>(GetOwner());
+
+	AAbilityShooterPlayerController* pc = Cast<AAbilityShooterPlayerController>(KilledPlayer);
+	if (IsValid(pc))
+		pc->OnShooterDeath(DamageEvent);
+
 	GetWorld()->GetAuthGameMode<AAbilityShooterGameMode>()->ShooterKilled(Killer, KilledPlayer, this, DamageType, Cast<AShooterItem>(DamageCauser));
 
 	NetUpdateFrequency = GetDefault<AAbilityShooterCharacter>()->NetUpdateFrequency;
@@ -762,8 +836,8 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FShooterDamage const
 		ReplicateHit(KillingDamage, DamageEvent, PawnInstigator, DamageCauser, true);
 
 		// play the force feedback effect on the client player controller
-		APlayerController* PC = Cast<APlayerController>(Controller);
-		if (PC && DamageEvent.DamageTypeClass)
+		AAbilityShooterPlayerController* PC = Cast<AAbilityShooterPlayerController>(Controller);
+		if (PC)
 		{
 			/*UShooterDamageType *DamageType = Cast<UShooterDamageType>(DamageEvent.DamageTypeClass->GetDefaultObject());
 			if (DamageType && DamageType->KilledForceFeedback)
@@ -854,6 +928,20 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FShooterDamage const
 	// remove all weapons
 	//DestroyInventory();
 
+	//finally tell the UIs of both the damaging character and this character of this damage event
+	if (IsValid(PawnInstigator))
+	{
+		pc = Cast<AAbilityShooterPlayerController>(PawnInstigator->GetController());
+		if (pc)
+		{
+			APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
+			if (hud)
+			{
+				hud->OnCharacterDealtDamage(DamageEvent);
+			}
+		}
+	}
+
 	DetachFromControllerPendingDestroy();
 	//StopAllAnimMontages();
 
@@ -867,7 +955,9 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FShooterDamage const
 		RunLoopAC->Stop();
 	}*/
 
-
+	//add the damage event to death recap and stop the timeout timer
+	deathRecapList.Add(DamageEvent);
+	GetWorldTimerManager().ClearTimer(deathRecapTimeoutTimer);
 
 	if (GetMesh())
 	{
@@ -875,6 +965,8 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FShooterDamage const
 		GetMesh()->SetCollisionProfileName(CollisionProfileName);
 	}
 	SetActorEnableCollision(true);
+
+	OnShooterDied.Broadcast(DamageEvent);
 
 	// Death anim
 	/*float DeathAnimDuration = PlayAnimMontage(DeathAnim);
@@ -890,26 +982,6 @@ void AAbilityShooterCharacter::OnDeath(float KillingDamage, FShooterDamage const
 	{
 		SetRagdollPhysics();
 	}*/
-
-	//finally tell the UIs of both the damaging character and this character of this damage event
-	pc = Cast<AAbilityShooterPlayerController>(PawnInstigator->GetController());
-	if (pc)
-	{
-		APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
-		if (hud)
-		{
-			hud->OnCharacterDealtDamage(DamageEvent);
-		}
-	}
-	pc = Cast<AAbilityShooterPlayerController>(GetController());
-	if (pc)
-	{
-		APlayerHUD* hud = Cast<APlayerHUD>(pc->GetHUD());
-		if (hud)
-		{
-			hud->OnCharacterDamaged(DamageEvent);
-		}
-	}
 
 	SetRagdollPhysics();
 
@@ -1264,10 +1336,6 @@ void AAbilityShooterCharacter::ApplyEffect_Implementation(AAbilityShooterCharact
 			hud->OnEffectsListUpdate();
 	}
 
-	//if we're not the server, just set the expiration timer and add
-	if (Role < ROLE_Authority)
-		return;
-
 	//blueprint on application event
 	newEffect->OnEffectAppliedToCharacter(this);
 }
@@ -1281,8 +1349,7 @@ void AAbilityShooterCharacter::EndEffect(UEffect* endingEffect)
 	GetWorldTimerManager().ClearTimer(endingEffect->expirationTimer);
 
 	//let the effect do any blueprint operations
-	if (Role == ROLE_Authority)
-		endingEffect->OnEffectRemovedFromCharacter(this);
+	endingEffect->OnEffectRemovedFromCharacter(this);
 
 	//remove the effect from our arrays
 	currentEffects.Remove(endingEffect);
@@ -1611,6 +1678,17 @@ void AAbilityShooterCharacter::SetEffectStacks_Implementation(const FString& key
 	}
 }
 
+UEffect* AAbilityShooterCharacter::GetEffect(const FString& key) const
+{
+	for (UEffect* effect : currentEffects)
+	{
+		if (effect->key == key)
+			return effect;
+	}
+
+	return nullptr;
+}
+
 void AAbilityShooterCharacter::UpgradeOutfit_Implementation(uint8 tree, uint8 row, uint8 col)
 {
 	if (IsValid(currentOutfit))
@@ -1644,6 +1722,121 @@ void AAbilityShooterCharacter::StopDash()
 	{
 		amc->EndDash();
 	}
+}
+
+void AAbilityShooterCharacter::AddShield_Implementation(FDamageShield newShield, const FString& effectKey)
+{
+	if (newShield.amountMax > 0)
+	{
+		if (!effectKey.IsEmpty())
+		{
+			newShield.shieldEffect = GetEffect(effectKey);
+		}
+
+		newShield.amount = newShield.amountMax;
+		shields.Add(newShield.key, newShield);
+
+		//update shield totals
+		if (shieldTotals.Contains(newShield.damageType))
+			shieldTotals[newShield.damageType] += newShield.amount;
+		else
+			shieldTotals.Add(newShield.damageType, newShield.amount);
+
+		if (newShield.duration > 0.f)
+			GetWorld()->GetTimerManager().SetTimer(newShield.timer, FTimerDelegate::CreateUObject(this, &AAbilityShooterCharacter::ShieldFinished, newShield.key), newShield.duration, false);
+	}
+}
+
+float AAbilityShooterCharacter::TryDamageShieldAbsorb(float dmgAmount, TSubclassOf<UDamageType> dmgType)
+{
+	if (!IsValid(dmgType))
+		return dmgAmount;
+
+	for (auto& shield : shields)
+	{
+		if (shield.Value.damageType->IsChildOf(dmgType)) //found a shield that can absorb this type of damage
+		{
+			if (shield.Value.amount >= dmgAmount)
+			{
+				shield.Value.amount -= dmgAmount;
+				dmgAmount = 0.f;
+				break;
+			}
+			else
+			{
+				dmgAmount -= shield.Value.amount;
+				shield.Value.amount = 0.f;
+				EndShield(shield.Key);
+			}
+		}
+	}
+
+	TArray<FDamageShield> newShields;
+	for (auto& shield : shields)
+	{
+		newShields.Add(shield.Value);
+	}
+	ClientUpdateShields(newShields);
+
+	UpdateTotalShieldAmounts();
+	return dmgAmount;
+}
+
+void AAbilityShooterCharacter::ShieldFinished(FString finishingShield)
+{
+	if (shields.Contains(finishingShield))
+	{
+		FDamageShield shield = shields[finishingShield];
+		if (shield.shieldEffect)
+			EndEffect(shield.shieldEffect);
+
+		GetWorld()->GetTimerManager().ClearTimer(shields[finishingShield].timer);
+		shields.Remove(finishingShield);
+
+		UpdateTotalShieldAmounts();
+	}
+}
+
+void AAbilityShooterCharacter::UpdateTotalShieldAmounts()
+{
+	shieldTotals.Empty();
+
+	for (auto& shield : shields)
+	{
+		if (shieldTotals.Contains(shield.Value.damageType))
+			shieldTotals[shield.Value.damageType] += shield.Value.amount;
+		else
+			shieldTotals.Add(shield.Value.damageType, shield.Value.amount);
+	}
+}
+
+void AAbilityShooterCharacter::GetTotalShieldAmounts(TArray<TSubclassOf<UDamageType> >& shieldedDamageTypes, TArray<float>& shieldDamageTotals)
+{
+	for (auto& shield : shieldTotals)
+	{
+		TSubclassOf<UDamageType> dmgType = shield.Key;
+		shieldedDamageTypes.Add(dmgType);
+
+		float amt = shield.Value;
+		shieldDamageTotals.Add(amt);
+	}
+}
+
+void AAbilityShooterCharacter::ClientUpdateShields_Implementation(const TArray<FDamageShield>& updatedShields)
+{
+	shields.Empty();
+
+	for (FDamageShield shield : updatedShields)
+	{
+		shields.Add(shield.key, shield);
+	}
+
+	UpdateTotalShieldAmounts();
+}
+
+void AAbilityShooterCharacter::EndShield_Implementation(const FString& key)
+{
+	ShieldFinished(key);
 }
 
 //////////////////////////////////////////////////////////////////////////

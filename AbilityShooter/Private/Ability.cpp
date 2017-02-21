@@ -748,6 +748,8 @@ bool AAbility::CanHurtCharacter(AAbilityShooterCharacter* testCharacter) const
 		return false;
 	if (!testCharacter->IsAlive())
 		return false;
+	if (characterOwner == testCharacter)
+		return false;
 	
 	return IsValid(gm) ? gm->CanDealDamage(Cast<AASPlayerState>(characterOwner->PlayerState), Cast<AASPlayerState>(testCharacter->PlayerState)) : false;
 }
@@ -778,6 +780,14 @@ void AAbility::GetAreaOfEffect(const FVector& sphereCenter, const float sphereRa
 				outList.AddUnique(gc);
 			}
 		}
+	}
+}
+
+void AAbility::EditCooldown_Implementation(float newCooldownTime)
+{
+	if (currentState == EAbilityState::OnCooldown || currentState == EAbilityState::Paused)
+	{
+		GetWorldTimerManager().SetTimer(cooldownTimer, this, &AAbility::CooldownFinished, newCooldownTime);
 	}
 }
 

@@ -76,4 +76,16 @@ public:
 	/* called whenever we should notify the player of a kill in the kill feed */
 	UFUNCTION(BlueprintImplementableEvent, Category = Kill)
 	void OnAddKillToKillfeed(AASPlayerState* killingPlayer, AShooterItem* killingItem, AASPlayerState* killedPlayer);
+
+	/* on owning shooter died */
+	UFUNCTION(BlueprintImplementableEvent, Category = Death)
+	void OnCharacterDied(FShooterDamage damage);
+
+	/* whenever the owning shooter is respawned */
+	UFUNCTION(BlueprintImplementableEvent, Category = Death)
+	void OnCharacterRespawned();
+
+	/* implement displaying a message to the killfeed */
+	UFUNCTION(BlueprintImplementableEvent, Category = Log)
+	void ReceiveKillfeedMessage(const FString& message);
 };

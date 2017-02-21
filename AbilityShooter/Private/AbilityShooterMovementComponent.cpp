@@ -13,7 +13,11 @@ void UAbilityShooterMovementComponent::TickComponent(float DeltaTime, enum ELeve
 
 	if (bCharacterDashing)
 	{
-		if ((GetCharacterOwner()->GetActorLocation() - currentDashLocation).IsNearlyZero(15.f))
+		AAbilityShooterCharacter* pc = Cast<AAbilityShooterCharacter>(CharacterOwner);
+		if (!IsValid(pc))
+			return;
+
+		if ((GetCharacterOwner()->GetActorLocation() - currentDashLocation).IsNearlyZero(15.f) || pc->GetCurrentAilment().type == EAilment::AL_Stun || pc->GetCurrentAilment().type == EAilment::AL_Knockup) //end the dash if we're at the target location or we got hard cc'd
 			EndDash();
 		else
 			GetCharacterOwner()->SetActorLocation(FMath::VInterpConstantTo(GetCharacterOwner()->GetActorLocation(), currentDashLocation, DeltaTime, 7100.f*flySpeedScale));
